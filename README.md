@@ -60,6 +60,7 @@ Volume and tracking are client sided. Tracking will de-sync.
 Screens do not currently check for sync or update to currently playing videos when connecting/loading new mediaplayers.
 
 ## NodeJS Server Installation
+[Tutorial Video](https://www.youtube.com/watch?v=9_vs8MItO38)
 Setup of YouTube functionality is a little more involved. 
 After multiple attempts I could not get any YouTube library to work so we're grabbing
 YouTube links through 
