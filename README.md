@@ -7,6 +7,9 @@ can either play direct audio files, or SoundCloud links (with availability) -
 and all of this is multiplayer compatible and seemingly relatively low-impact.   
 
 [<img alt="Preview Video" width="256px" src="https://i.imgur.com/0BaY28I.jpg" />](https://www.youtube.com/watch?v=hePW1dueKjE)
+
+[YouTube Server Setup Tutorial Video](https://www.youtube.com/watch?v=9_vs8MItO38)
+
 ## Features
 
 - Cinema screens
