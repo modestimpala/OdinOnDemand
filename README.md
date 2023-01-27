@@ -22,7 +22,7 @@ the github tracker.
 
 ## Installation
 
-Installation of the plugin is fairly straightforward, just install into Bepinex/plugins or use r2modman.
+Installation of the plugin is fairly straightforward, just install into Bepinex/plugins or use r2modman. It must be installed on both server and client.
 
 See NodeJS Server Installation for YouTube functionality.
 
