@@ -9,7 +9,7 @@ const port = process.env.PORT || 3000;
 
 // ** CHANGE ME **
 // https://generate.plus/en/base64 make it like ~6-8 characters and select "URL safe" (equal signs are OK, throw on a few at the end for fun)
-const authString = "aFfiyQLctKg="; // GENERATE OWN AUTH CODE HERE 
+const authString = "CHANGEME="; // GENERATE OWN AUTH CODE HERE 
 
 app.get('/yt/:name/:auth', function(req, res) {
   res.send(req.params.name);
