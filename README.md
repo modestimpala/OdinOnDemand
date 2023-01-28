@@ -10,7 +10,7 @@ YouTube now works natively! Be sure to wipe configs.
 
 [<img alt="Preview Video" width="256px" src="https://i.imgur.com/0BaY28I.jpg" />](https://www.youtube.com/watch?v=hePW1dueKjE)
 
-
+I am available in the larger Valheim / Jotunn modding Discords for contact under ModestImpala.
 
 ## Features
 
