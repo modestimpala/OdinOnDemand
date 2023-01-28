@@ -2,33 +2,35 @@
 # OdinOnDemand
 
 OdinOnDemand (OOD) adds several forms of multimedia to Valheim that allow 
-players to watch YouTube and direct video files on an in-game screen. The mod also contains a boombox that 
-can either play direct audio files, or SoundCloud links (with availability) - 
+players to watch YouTube and direct video files on an in-game screen. Create your own cinema!
+The mod also contains a boombox that can either play direct audio files, or SoundCloud links (with availability) - 
 and all of this is multiplayer compatible and seemingly relatively low-impact.   
+
+YouTube now works natively! Be sure to wipe configs.
 
 [<img alt="Preview Video" width="256px" src="https://i.imgur.com/0BaY28I.jpg" />](https://www.youtube.com/watch?v=hePW1dueKjE)
 
-[YouTube Server Setup Tutorial Video](https://www.youtube.com/watch?v=9_vs8MItO38)
+
 
 ## Features
 
 - Cinema screens
    - Flatscreen TV, Table TV, Old TV, Laptop
+   - Can play YouTube, Remote and Local files
 - Audio Players
    - Boombox
 - Multiplayer functionality
 - Audio Control <sub>(Client Side)</sub>
 - Forward Tracking <sub>(Client Side)</sub>
 
-This first release can be considered a beta as it has not been extensively tested. Please report any issues on
-the github tracker.
+These first releases can be considered betas as it has not been extensively tested. Please report any issues on
+the GitHub tracker.
 
 ## Installation
 
 Installation of the plugin is fairly straightforward, just install into Bepinex/plugins or use r2modman. It must be installed on both server and client.
 
-See NodeJS Server Installation for YouTube functionality.
-
+See NodeJS Server Installation for backup/selfhosted YouTube functionality.
 
 ## Use
 In game, place down a cinema screen or boombox. Every player costs 2 bronze currently. Interact with it to open the GUI.
@@ -36,9 +38,9 @@ In game, place down a cinema screen or boombox. Every player costs 2 bronze curr
 For cinema screens, you must have
 either a direct link to a remote or local video file of a 
 [compatible codec](https://docs.unity3d.com/2020.1/Documentation/Manual/VideoSources-FileCompatibility.html)
-or have the yt-dlp nodejs server installed and config enabled to support Youtube links.
-In which case, you may use youtube/youtu.be links to watch Youtube videos and shorts. YouTube is not enabled 
-by default.
+or use a youtube/youtu.be link. YouTube is now enabled by default. You can change between the built in YouTube library vs the self-hosted 
+NodeJS server for grabbing YouTube links in the config. The NodeJS server may be more consistent 
+or higher quality. See NodeJS setup for more. 
 
 For boomboxes, you must have a direct link to a remote or local audio file of a 
 [compatible codec](https://support.unity.com/hc/en-us/articles/206484803-What-are-the-supported-Audio-formats-in-Unity-)
@@ -52,14 +54,18 @@ with play, pause, and stop. Press "Pickup" to remove the mediaplayer and refund 
 Control individual player's volume with "+" and "-" and toggle mute with the "M" button on the overflow menu.
 ">" to track forward. 
 
-In the mod settings you can control master volume. This will affect every screen and boombox, be careful not 
-to set this too high. 
+In the mod settings you can control master volume. This will affect every screen/boombox.
 
 All set file/play/pause/stop commands should be synced for multiplayer through RPC events. 
 Volume and tracking are client sided. Tracking will de-sync. 
 Screens do not currently check for sync or update to currently playing videos when connecting/loading new mediaplayers.
 
+
 ## NodeJS Server Installation
+
+No need to use an external server now, but it's still there if you want it. yt-dlp may often return more consistently and with better quality videos. 
+There is also the self-hosted benefit.
+
 [Tutorial Video](https://www.youtube.com/watch?v=9_vs8MItO38)
 
 Setup of YouTube functionality is a little more involved. 
@@ -118,14 +124,21 @@ to the internet. You could alternatively use a program like ZeroTier to avoid ex
 
 ## Acknowledgements
 
- - [SoundCloudExplode](https://github.com/jerry08/SoundCloudExplode) | [youtube-exec-dl](https://www.npmjs.com/package/youtube-dl-exec) | [nodejs](https://nodejs.org/en/) | [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+ - [SoundCloudExplode](https://github.com/jerry08/SoundCloudExplode) | [YouTubeExplode](https://github.com/Tyrrrz/YoutubeExplode) | [youtube-exec-dl](https://www.npmjs.com/package/youtube-dl-exec) | [nodejs](https://nodejs.org/en/) | [yt-dlp](https://github.com/yt-dlp/yt-dlp)
  - Inspired by [Raft Cinema Mod](https://www.raftmodding.com/mods/cinema-mod)
 
+
 ## Notes
- I do plan on uploading the source code soon but its C# so 
- I welcome anyone to try and figure out how to get YoutubeExplode 
- or libvid to work in Valheim as I was unsuccessful.
+ I do plan on uploading the source code soon, it's just really messy so I want to clean it up and work on it a bit first. Hopefully by 1.0.0.
 
 ### Versions:
+
+0.9.5-beta
+ - Added native Youtube Functionality. No need to use an external server now, but it's still there if you want it.
+   Youtube is now enabled by default and should work just fine. Let me know if you have any issues. Be sure to wipe configs.
+
+0.9.1-beta 
+ - Fixed Boombox Default Distance
+ - Separate Boombox Default Distance and Master Volume
 
 0.9.0-beta Initial Release
