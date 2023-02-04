@@ -1,12 +1,12 @@
 
+
 # OdinOnDemand
 
 OdinOnDemand (OOD) adds several forms of multimedia to Valheim that allow 
-players to watch YouTube and direct video files on an in-game screen. Create your own cinema!
-The mod also contains a boombox that can either play direct audio files, or SoundCloud links (with availability) - 
-and all of this is multiplayer compatible and seemingly relatively low-impact.   
+players to natively watch YouTube as well as direct video files on in-game screens. 
+The mod also contains a boombox/gramophone that can play YouTube, SoundCloud links, as well as direct audio files -- additionally, all of this is multiplayer compatible and seemingly relatively low-impact. 
 
-YouTube now works natively! Be sure to wipe configs.
+9.60 adds lots of stuff, be sure to check usage and the changelog! YouTube now works on boomboxes!
 
 [<img alt="Preview Video" width="256px" src="https://i.imgur.com/0BaY28I.jpg" />](https://www.youtube.com/watch?v=hePW1dueKjE)
 
@@ -18,13 +18,17 @@ I am available in the larger Valheim / Jotunn modding Discords for contact under
    - Flatscreen TV, Table TV, Old TV, Laptop
    - Can play YouTube, Remote and Local files
 - Audio Players
-   - Boombox
+   - Gramophone, Boombox
+   - Can play SoundCloud, YouTube, Remote and Local files
 - Multiplayer functionality
 - Audio Control <sub>(Client Side)</sub>
 - Forward Tracking <sub>(Client Side)</sub>
+- Looping
+- Recipe Configuration
 
-These first releases can be considered betas as it has not been extensively tested. Please report any issues on
-the GitHub tracker.
+This mod is in beta and has not been extensively tested. Please report any issues on
+the Nexus or GitHub tracker.
+
 
 ## Installation
 
@@ -32,33 +36,47 @@ Installation of the plugin is fairly straightforward, just install into Bepinex/
 
 See NodeJS Server Installation for backup/selfhosted YouTube functionality.
 
+## Recipes
+
+Recipes can now be tweaked through a json file located at BepInEx\config\com.ood.valmedia.recipes.json, the mod will automatically make this. However the default recipe file can be found [here](https://github.com/modestimpala/OdinOnDemand/blob/main/com.ood.valmedia.recipes.json) if needed. 
+
+Some helpful links to help you edit this file are here
+
+[Beautify JSON to made it readable, and validate it here](https://codebeautify.org/jsonviewer)
+
+[Valheim Item List](https://valheim-modding.github.io/Jotunn/data/objects/item-list.html)
+
+Unless you know what you're doing, please only change the requirements section. If you have any issues keep in mind you can delete your .json file and the mod will re-create it with default values.
+
+
 ## Use
-In game, place down a cinema screen or boombox. Every player costs 2 bronze currently. Interact with it to open the GUI.
+In game, place down a cinema screen or boombox. 
+
+Interact with it to open the GUI.
 
 For cinema screens, you must have
 either a direct link to a remote or local video file of a 
 [compatible codec](https://docs.unity3d.com/2020.1/Documentation/Manual/VideoSources-FileCompatibility.html)
-or use a youtube/youtu.be link. YouTube is now enabled by default. You can change between the built in YouTube library vs the self-hosted 
+or use a youtube/youtu.be link. YouTube should work natively. You can change between the built in YouTube library vs the self-hosted 
 NodeJS server for grabbing YouTube links in the config. The NodeJS server may be more consistent 
 or higher quality. See NodeJS setup for more. 
 
 For boomboxes, you must have a direct link to a remote or local audio file of a 
-[compatible codec](https://support.unity.com/hc/en-us/articles/206484803-What-are-the-supported-Audio-formats-in-Unity-)
-or use a soundcloud.com link. Through testing I've noticed some SoundCloud songs are 
+[compatible codec](https://support.unity.com/hc/en-us/articles/206484803-What-are-the-supported-Audio-formats-in-Unity-), a soundcloud.com link, or a youtube/youtu.be link. Through testing I've noticed some SoundCloud songs are 
 unavailable. I think it depends on the artist and how they upload/license their art. 
 
 Local files are not synced over multiplayer.
 
 Put the link into the input field and click set to set a file. Control playback
-with play, pause, and stop. Press "Pickup" to remove the mediaplayer and refund materials.
+with play, pause, and stop. Press "Pickup" to remove the media-player and refund materials.
 Control individual player's volume with "+" and "-" and toggle mute with the "M" button on the overflow menu.
-">" to track forward. 
+">" to track forward. You can enable or disable looping in the overflow menu as well.
 
 In the mod settings you can control master volume. This will affect every screen/boombox.
 
-All set file/play/pause/stop commands should be synced for multiplayer through RPC events. 
+All set file/play/pause/stop/looping commands should be synced for multiplayer through RPC events. 
 Volume and tracking are client sided. Tracking will de-sync. 
-Screens do not currently check for sync or update to currently playing videos when connecting/loading new mediaplayers.
+Screens do not currently check for sync or update to currently playing videos when connecting/loading new media-players.
 
 
 ## NodeJS Server Installation
@@ -120,6 +138,7 @@ to the internet. You could alternatively use a program like ZeroTier to avoid ex
 ![Mod Screenshot](https://i.imgur.com/QL6gvwc.jpg)
 ![Mod Screenshot](https://i.imgur.com/Y88KuWV.jpg)
 ![Mod Screenshot](https://i.imgur.com/wTmD6Cc.jpeg)
+![Mod Screenshot](https://i.imgur.com/IOYPOAa.jpeg)
 <sub>[Build by DanAugust](https://www.valheimians.com/build/small-simple-cabin-pre-plains/) Last picture is with backlight setting turned off.</sub>
 
 ## Acknowledgements
@@ -133,9 +152,38 @@ to the internet. You could alternatively use a program like ZeroTier to avoid ex
 
 ### Versions:
 
+0.9.60-beta
+ - First Gramophone prefab release
+ - Added custom recipes via json config
+ - Added looping with multiplayer sync
+ - Added Boombox YouTube support
+ - Added loading circle to cinema screens
+ - Greatly increased efficiency of how plugin finds media-players for multiplayer
+ - Changed volume handling, added default player volume
+ - Fixed Boombox volume bug
+ - Fixed boombox playing previous SoundCloud song on set video button press when song unavailable
+ - Cleaned up debug logging
+ - Cleaned up config
+
+0.9.58-beta
+ - Fixed GUI not closing when media-player destroyed by other player.
+
+0.9.57-beta
+ - Added Vulkan Support
+
+0.9.56-beta
+ - Small adjustment in Rendering distance calculations 
+
+0.9.55-beta
+ - Fixed Screen volume bug
+ - Added "Screens Stop Rendering Out of Range" and config
+
+0.9.51-beta
+ - Fix spelling mistake
+
 0.9.5-beta
- - Added native Youtube Functionality. No need to use an external server now, but it's still there if you want it.
-   Youtube is now enabled by default and should work just fine. Let me know if you have any issues. Be sure to wipe configs.
+ - Added native YouTube Functionality. No need to use an external server now, but it's still there if you want it.
+   YouTube is now enabled by default and should work just fine. Let me know if you have any issues. Be sure to wipe configs.
 
 0.9.1-beta 
  - Fixed Boombox Default Distance
