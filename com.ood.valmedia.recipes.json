@@ -6,7 +6,8 @@
     "Requirements": [
       {
         "Item": "Bronze",
-        "Amount": 2
+        "Amount": 2,
+		"Recover": true
       }
     ]
   },
@@ -17,7 +18,8 @@
     "Requirements": [
       {
         "Item": "Bronze",
-        "Amount": 2
+        "Amount": 2,
+		"Recover": true
       }
     ]
   },
@@ -28,11 +30,13 @@
     "Requirements": [
       {
         "Item": "Wood",
-        "Amount": 1
+        "Amount": 1,
+		"Recover": true
       },
       {
         "Item": "Bronze",
-        "Amount": 2
+        "Amount": 2,
+		"Recover": true
       }
     ]
   },
@@ -43,7 +47,8 @@
     "Requirements": [
       {
         "Item": "Bronze",
-        "Amount": 2
+        "Amount": 2,
+		"Recover": true
       }
     ]
   },
@@ -54,7 +59,8 @@
     "Requirements": [
       {
         "Item": "Bronze",
-        "Amount": 2
+        "Amount": 2,
+		"Recover": true
       }
     ]
   },
@@ -65,15 +71,18 @@
     "Requirements": [
       {
         "Item": "FineWood",
-        "Amount": 1
+        "Amount": 1,
+		"Recover": true
       },
       {
         "Item": "Bronze",
-        "Amount": 2
+        "Amount": 2,
+		"Recover": true
       },
       {
         "Item": "Flint",
-        "Amount": 1
+        "Amount": 1,
+		"Recover": true
       }
     ]
   }
