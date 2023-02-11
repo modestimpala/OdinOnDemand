@@ -24,6 +24,18 @@
     ]
   },
   {
+    "Name": "$piece_monitor",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "Bronze",
+        "Amount": 2,
+		"Recover": true
+      }
+    ]
+  },
+  {
     "Name": "$piece_oldtv",
     "Category": "OOD",
     "PieceTable": "Hammer",
