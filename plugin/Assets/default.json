@@ -1,0 +1,192 @@
+[
+  {
+    "Name": "$piece_flatscreen",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "Bronze",
+        "Amount": 2,
+        "Recover": true
+      }
+    ]
+  },
+  {
+    "Name": "$piece_theaterscreen",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "Bronze",
+        "Amount": 12,
+        "Recover": true
+      },
+      {
+        "Item": "Wood",
+        "Amount": 4,
+        "Recover": true
+      },
+      {
+        "Item": "GreydwarfEye",
+        "Amount": 6,
+        "Recover": true
+      }
+      
+    ]
+  },
+  {
+    "Name": "$piece_tabletv",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "Bronze",
+        "Amount": 2,
+        "Recover": true
+      }
+    ]
+  },
+  {
+    "Name": "$piece_monitor",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "Bronze",
+        "Amount": 2,
+        "Recover": true
+      }
+    ]
+  },
+  {
+    "Name": "$piece_oldtv",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "Wood",
+        "Amount": 1,
+        "Recover": true
+      },
+      {
+        "Item": "Bronze",
+        "Amount": 2,
+        "Recover": true
+      }
+    ]
+  },
+  {
+    "Name": "$piece_laptop",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "Bronze",
+        "Amount": 2,
+        "Recover": true
+      }
+    ]
+  },
+  {
+    "Name": "$piece_studiospeaker",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "Wood",
+        "Amount": 1,
+        "Recover": true
+      },
+      {
+        "Item": "Bronze",
+        "Amount": 2,
+        "Recover": true
+      }
+    ]
+  },
+  {
+    "Name": "$piece_standingspeaker",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "Wood",
+        "Amount": 1,
+        "Recover": true
+      },
+      {
+        "Item": "Bronze",
+        "Amount": 2,
+        "Recover": true
+      }
+    ]
+  },
+  {
+    "Name": "$piece_receiver",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "Wood",
+        "Amount": 1,
+        "Recover": true
+      },
+      {
+        "Item": "Bronze",
+        "Amount": 2,
+        "Recover": true
+      }
+    ]
+  },
+  {
+    "Name": "$piece_radio",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "Wood",
+        "Amount": 1,
+        "Recover": true
+      },
+      {
+        "Item": "Bronze",
+        "Amount": 2,
+        "Recover": true
+      }
+    ]
+  },
+  {
+    "Name": "$piece_boombox",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "Bronze",
+        "Amount": 2,
+        "Recover": true
+      }
+    ]
+  },
+  {
+    "Name": "$piece_gramophone",
+    "Category": "OOD",
+    "PieceTable": "Hammer",
+    "Requirements": [
+      {
+        "Item": "FineWood",
+        "Amount": 1,
+        "Recover": true
+      },
+      {
+        "Item": "Bronze",
+        "Amount": 2,
+        "Recover": true
+      },
+      {
+        "Item": "Flint",
+        "Amount": 1,
+        "Recover": true
+      }
+    ]
+  }
+]

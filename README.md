@@ -1,12 +1,15 @@
 
 
+
 # OdinOnDemand
 
-OdinOnDemand (OOD) adds several forms of multimedia to Valheim that allow 
-players to natively watch YouTube as well as direct video files on in-game screens. 
-The mod also contains a boombox/gramophone that can play YouTube, SoundCloud links, as well as direct audio files -- additionally, all of this is multiplayer compatible and seemingly relatively low-impact. 
+OdinOnDemand (OOD) adds several forms of multimedia to Valheim that allow players to natively watch YouTube as well as direct video files on in-game screens. The mod also offers two types of musicplayers that can play YouTube, SoundCloud links, as well as direct audio files --  additionally, all of this is multiplayer compatible and seemingly relatively low-impact.
 
-9.60 adds lots of stuff, be sure to check usage and the changelog! YouTube now works on boomboxes!
+ValMedia recommends playing without bloom while watching for the best viewing experience. 
+
+### Due to Valheim's recent upgrade to Unity version 2020.3.45, you may experience crashes during video playback because of a new [VideoPlayer bug](https://forum.unity.com/threads/crash-windowsvideotextureoutput-releasedrawnsamples-bool.1396480/). This may be related to MP4 files. We recommend utilizing VP8 codec videos (webm) or MP3/SoundCloud options as a temporary measure. If a fix is discovered an update will be pushed out, otherwise we're waiting for another Unity update. Apologies for any inconvenience. - ValMedia
+
+0.9.85 introduces new assets, relative path lookup from plugin dir (local://) and more. Check out the updated documentation below.
 
 [<img alt="Preview Video" width="256px" src="https://i.imgur.com/0BaY28I.jpg" />](https://www.youtube.com/watch?v=hePW1dueKjE)
 
@@ -15,69 +18,104 @@ I am available in the larger Valheim / Jotunn modding Discords for contact under
 ## Features
 
 - Cinema screens
-   - Flatscreen TV, Table TV, Old TV, Laptop
-   - Can play YouTube, Remote and Local files
-- Audio Players
-   - Gramophone, Boombox
-   - Can play SoundCloud, YouTube, Remote and Local files
+   - Theater Screen, Flatscreen TV, Table TV, Monitor, Old TV, Laptop
+   - Plays YouTube, Remote and Local files
+- Musicplayers
+   - Gramophone, Boombox, Radio
+   - Plays SoundCloud, YouTube, Remote and Local files
+- Speakers, Receiver props
+- YouTube playlist support
+- Remote control to use screens from a distance
 - Multiplayer functionality
-- Audio Control <sub>(Client Side)</sub>
-- Forward Tracking <sub>(Client Side)</sub>
-- Looping
-- Recipe Configuration
+- Full mediaplayer configuration
+	- Audio control, forward tracking, looping, autoplay, admin only options
+- Piece Recipe Configuration (item recipes coming soon)
 
 This mod is in beta and has not been extensively tested. Please report any issues on
 the Nexus or GitHub tracker.
 
-
 ## Installation
 
-Installation of the plugin is fairly straightforward, just install into Bepinex/plugins or use r2modman. It must be installed on both server and client.
+Installation of the plugin is fairly straightforward, just install into Bepinex/plugins or use r2modman. **It must be installed on both server and client.**
 
-See NodeJS Server Installation for backup/selfhosted YouTube functionality.
+## Building
+To build the project, Nuget restore. Then fix any dependencies in the .csproj file - make sure to use publicized dlls. We use a custom build of YoutubeExplode. You can either grab YoutubeExplode from a package repository or build it yourself. If you grab it from the repository you may experience issues in-game due to the package creators "Deorcify" package, which is why we use a custom build - to remove this package. Simply remove the Deorcify dependency from it's source code and build the dll, copy it over to packages folder and set the hint path. 
+
+## Use
+
+### MediaPlayers
+In game, place down a cinema screen or radio. Interact with it to open the GUI.
+
+#### Remote Playback
+You can paste direct links into the URL field to play online remote files. The linked file should be of a [compatible codec](https://docs.unity3d.com/2020.1/Documentation/Manual/VideoSources-FileCompatibility.html).
+You can also paste youtube/youtu.be links and the plugin will process this for you on both cinema screens and radios.
+
+Radios have the added ability to play audio files of [compatible codecs](https://support.unity.com/hc/en-us/articles/206484803-What-are-the-supported-Audio-formats-in-Unity-), as well as soundcloud.com links - some SoundCloud songs are unavailable, depending on the artist and how they upload/license their art.
+
+#### Local Playback
+Mediaplayers can also play files from your computer's local filesystem. You can use [absolute and relative path](https://www.computerhope.com/issues/ch001708.htm) lookup for local files.
+
+Absolute path lookup includes a drive letter, and is **not** synced over multiplayer unless players have identical file path structures (which is unlikely). For example, C:\videos\bunny.mp4 or file://C:\videos\bunny.mp4
+
+Relative path lookup begins searching for files from **Bepinex's plugin folder.** Relative path lookup must include prefix `local://` or `local:\\`
+To load files from the plugin's folder, identify your media location - for example, the OOD plugin folder name. For r2modman installations, it's usually "ValMedia-OdinOnDemand" - here the path would be`local://Valmedia-OdinOnDemand/media.mp4`  <- insert this into the URL field in-game. 
+This would translate into `F:\SteamLibrary\steamapps\common\Valheim\BepInEx\plugins\Valmedia-OdinOnDemand\media.mp4` or wherever the user's Valheim installation may reside.
+You can bundle video files with your modpacks or instruct Vikings to place files in appropriate locations for easier synced local playback. Autoplay them in-game for events and lore and more. You can pull from anywhere in the local plugin folder.
+
+#### Youtube Playlists
+Mediaplayers have support for Youtube playlists. When a playlist is set, new info will appear in the UI. The Viking who initially sets the playlist handles playlist logic, so if they leave the area or disconnect playlist playback will stop. It is multiplayer synced. Do not skip through tracks too fast. You can choose to shuffle or loop the playlist. If looping, the whole playlist will loop - not individual videos. If autoplay enabled, the last video played will be saved as the autoplay video when the Viking unloads the mediaplayer object.
+
+#### Remote Control
+
+Mediaplayers can be controlled from a distance with a remote control. A remote control can be crafted with 1 bronze. Simply equip, point at a Mediaplayer and click.
+Config options include key configs, max controller distance, and an option to make remote control access private. 
+
+#### Locking
+
+Mediaplayers can be locked in the top right corner of the menu. When a Mediaplayer is locked, Vikings can only access it if they have access to the private area created by a Ward. 
+Admins can lock down mediaplayers from the cog menu, preventing normal Vikings from interacting with specific screens.
+
+#### Additional Options
+
+The cog button in the bottom right displays extra options. Options for autoplay, admin only access, listening distance and master volume exist here.
+
+Autoplay does not currently support playlists. If a viking is playing a playlist with autoplay enabled and unloads the mediaplayer object, the autoplay video will be set to the last played video.
+
+Autoplayed videos are not synced. **Vikings will load videos upon mediaplayer load-in.**
+
+- Master volume controls the overall volume level for that type of mediaplayer, from every single mediaplayer. It is a client sided option designed to allow Vikings to mute or boost audio for mediaplayers to their personal liking.
+- Listening distance is a **multiplayer synced** parameter that changes how far away audio is heard from individual mediaplayers. This can be limited in the plugin's config, which is not enforced on admins.
+
+Default values and client sided master volume values can also be changed in the config.
+
+Most features are synced over multiplayer through RPC events. 
+Volume and tracking are client sided. Tracking will de-sync. 
+Screens do not currently check for video sync or update to currently playing videos when connecting/loading new Mediaplayers (unless autoplay is enabled and a video is set)
 
 ## Recipes
 
-Recipes can now be tweaked through a json file located at BepInEx\config\com.ood.valmedia.recipes.json, the mod will automatically make this. However the default recipe file can be found [here](https://github.com/modestimpala/OdinOnDemand/blob/main/com.ood.valmedia.recipes.json) if needed. 
+Recipes can now be tweaked through a json file located at BepInEx\config\com.ood.valmedia.recipes.json, the mod will automatically make this. However the default recipe file can be found [here](https://github.com/modestimpala/OdinOnDemand/blob/main/plugin/Assets/default.json) if needed. 
 
 Some helpful links to help you edit this file are here
 
-[Beautify JSON to made it readable, and validate it here](https://codebeautify.org/jsonviewer)
-
+[Beautify/Validate JSON](https://codebeautify.org/jsonviewer)
 [Valheim Item List](https://valheim-modding.github.io/Jotunn/data/objects/item-list.html)
 
-Unless you know what you're doing, please only change the requirements section. If you have any issues keep in mind you can delete your .json file and the mod will re-create it with default values.
+Avoid changing item names. If you have any issues keep in mind you can delete your .json file and the mod will re-create it with default values.
 
+The remote control recipe can't be tweaked yet, you can always use a mod like WackysDB for the time being.
 
-## Use
-In game, place down a cinema screen or boombox. 
+## Known Issues
 
-Interact with it to open the GUI.
+- Unity crashes, see above notice.
 
-For cinema screens, you must have
-either a direct link to a remote or local video file of a 
-[compatible codec](https://docs.unity3d.com/2020.1/Documentation/Manual/VideoSources-FileCompatibility.html)
-or use a youtube/youtu.be link. YouTube should work natively. You can change between the built in YouTube library vs the self-hosted 
-NodeJS server for grabbing YouTube links in the config. The NodeJS server may be more consistent 
-or higher quality. See NodeJS setup for more. 
+- Boomboxes are currently difficult to place. Just.. keep trying. They place easier on terrain it seems. I'm not quite sure why this is happening. Gramophones are not affected. 
 
-For boomboxes, you must have a direct link to a remote or local audio file of a 
-[compatible codec](https://support.unity.com/hc/en-us/articles/206484803-What-are-the-supported-Audio-formats-in-Unity-), a soundcloud.com link, or a youtube/youtu.be link. Through testing I've noticed some SoundCloud songs are 
-unavailable. I think it depends on the artist and how they upload/license their art. 
+### If you have V-Sync force enabled in your GPU driver control panel, the mod may not function. 
 
-Local files are not synced over multiplayer.
+![V-Sync Screenshot](https://i.imgur.com/JZTG3CZ.png)
 
-Put the link into the input field and click set to set a file. Control playback
-with play, pause, and stop. Press "Pickup" to remove the media-player and refund materials.
-Control individual player's volume with "+" and "-" and toggle mute with the "M" button on the overflow menu.
-">" to track forward. You can enable or disable looping in the overflow menu as well.
-
-In the mod settings you can control master volume. This will affect every screen/boombox.
-
-All set file/play/pause/stop/looping commands should be synced for multiplayer through RPC events. 
-Volume and tracking are client sided. Tracking will de-sync. 
-Screens do not currently check for sync or update to currently playing videos when connecting/loading new media-players.
-
+If the mod fails to play any sort of video file, not just YouTube - Please check your GPU driver's control panel and make sure the vertical sync setting is either identical your in-game settings or set to "match application setting". You can also check your Player.log. If there are errors about Direct3D and refresh rate / v-sync you may have to do this. 
 
 ## NodeJS Server Installation
 
@@ -135,24 +173,91 @@ Additionally, please practice good saftey standards when opening up a server app
 to the internet. You could alternatively use a program like ZeroTier to avoid exposing a port publicly. 
 
 ## Screenshots 
+![Mod Screenshot](https://cdn.discordapp.com/attachments/602048405702705173/1076343490625151078/valheim_pqt3uMxRgR.png)
+![Mod Screenshot](https://i.imgur.com/IOYPOAa.jpeg)
 ![Mod Screenshot](https://i.imgur.com/QL6gvwc.jpg)
 ![Mod Screenshot](https://i.imgur.com/Y88KuWV.jpg)
 ![Mod Screenshot](https://i.imgur.com/wTmD6Cc.jpeg)
-![Mod Screenshot](https://i.imgur.com/IOYPOAa.jpeg)
-<sub>[Build by DanAugust](https://www.valheimians.com/build/small-simple-cabin-pre-plains/) Last picture is with backlight setting turned off.</sub>
+<sub>[Build by DanAugust](https://www.valheimians.com/build/small-simple-cabin-pre-plains/) Last picture is with back-light setting turned off.</sub>
+
+For any tech-savvy Vikings out there, there is a backup YouTube api that can be self hosted using Node and youtube-dl. This is **completely optional** and not required as long as the built in library is maintained (YouTubeExplode)
+
+[Tutorial Video](https://www.youtube.com/watch?v=9_vs8MItO38)
+
+[Github Instructions](https://github.com/modestimpala/OdinOnDemand)
 
 ## Acknowledgements
 
  - [SoundCloudExplode](https://github.com/jerry08/SoundCloudExplode) | [YouTubeExplode](https://github.com/Tyrrrz/YoutubeExplode) | [youtube-exec-dl](https://www.npmjs.com/package/youtube-dl-exec) | [nodejs](https://nodejs.org/en/) | [yt-dlp](https://github.com/yt-dlp/yt-dlp)
  - Inspired by [Raft Cinema Mod](https://www.raftmodding.com/mods/cinema-mod)
-
-
-## Notes
- I do plan on uploading the source code soon, it's just really messy so I want to clean it up and work on it a bit first. Hopefully by 1.0.0.
+ - Special shoutout to the [Valhalla server](https://valheim.thunderstore.io/package/FreyaValhalla/Valhalla_Dedicated/) Community and Administration
+ - Any and all other project supporters - thanks for all the interest and support along the way.
+ 
+ 
 
 ### Versions:
 
-0.9.60-beta
+## 0.9.85-beta
+ - Added prefabs:
+   - New mediaplayer: Radio, a vintage style wooden radio
+   - Studio Speaker, Standing Speaker, Receiver
+      - Decorative pieces, with future planned mechanics
+ - Added relative path file lookup from plugin dir (local:// or local:\\)
+ - Default recipe JSON is now properly formatted
+ - Autoplay YouTube and SoundCloud links are now stored and sent un-parsed, fixing old CDN video timeout
+ - Proper key config for Remote Control
+ - Modifications to YoutubeExplode Library
+ - Readme update
+ - Code refactoring
+
+## 0.9.82-beta
+ - Added crash disclaimer from 2020.3.45 upgrade
+
+## 0.9.81-beta
+ - Updated YoutubeExplode to version 6.2.12
+
+## 0.9.80-beta
+ - Theater Screen
+   - Very large screen roughly 16m x 9m for theater environments.
+ - Fixed ward locking behavior 
+ - Fixed musicplayer volume mixer
+ - Added settings overlay, click the cog icon!
+ - Added ZDO for several variables
+   - Distance, Autoplay/URL, Admin Only, isLocked, and isLooping are saved to world and synced over multiplayer. 
+   - This means each individual player can have it's own distance and properties, which will sync and persist after reloading world or areas!
+   - Custom listening distance can be limited via config. This is not enforced on admins.
+ - Added admin only
+ - Added autoplay
+   - Playlists are currently NOT supported.
+   - .mp3/SoundCloud autoplay is currently NOT supported. Direct video links or youtube only.
+   - Autoplayed videos are NOT SYCNED. The video will start upon object loading for every viking.
+   - Please be aware that YouTube videos saved from autoplay will expire after an indeterminable amount of time. This is simply the nature of Google's content delivery and as such cannot be avoided.
+  
+## 0.9.76-beta
+ - Fixed playlist index string
+ - Fixed unnecessary debug logging
+
+## 0.9.75-beta
+ - UI Redesign
+	- Button icons, combined overflow menus, volume slider
+ - Ward interaction, when a media-player is Locked it will check for access with Wards. Media-players are locked by default. You may have to cycle the lock for newly loaded Vikings.
+ - Removed pickup button. All media-players can be destroyed via the Hammer just like any piece, you will get appropriate materials refunded. 
+ - All media-players now have Wear N Tear - they can take damage, and be destroyed. Media-players are weak to pickaxes.
+ - Changed Screen Render Distance calculations to hopefully be more efficient. It no longer does any distance calculations and instead just uses collider OnTrigger events.
+
+## 0.9.71-beta
+ - Fixed missing Monitor recipe. If your recipe file is outdated, the default one will be loaded. Check logs and delete recipe file if needed.
+
+## 0.9.70-beta
+ - Monitor Prefab added, larger than Old TV but smaller than Table TV.
+ - Remote control for interacting with media-players from a distance
+ - Basic playlist support implemented
+ - Shuffle feature for playlists
+ - Fixed resources not refunding on destruction
+ - Media-player code refactoring
+ - More multiplayer code refactoring 
+
+## 0.9.60-beta
  - First Gramophone prefab release
  - Added custom recipes via json config
  - Added looping with multiplayer sync
@@ -165,28 +270,28 @@ to the internet. You could alternatively use a program like ZeroTier to avoid ex
  - Cleaned up debug logging
  - Cleaned up config
 
-0.9.58-beta
+## 0.9.58-beta
  - Fixed GUI not closing when media-player destroyed by other player.
 
-0.9.57-beta
+## 0.9.57-beta
  - Added Vulkan Support
 
-0.9.56-beta
+## 0.9.56-beta
  - Small adjustment in Rendering distance calculations 
 
-0.9.55-beta
+## 0.9.55-beta
  - Fixed Screen volume bug
  - Added "Screens Stop Rendering Out of Range" and config
 
-0.9.51-beta
+## 0.9.51-beta
  - Fix spelling mistake
 
-0.9.5-beta
+## 0.9.5-beta
  - Added native YouTube Functionality. No need to use an external server now, but it's still there if you want it.
    YouTube is now enabled by default and should work just fine. Let me know if you have any issues. Be sure to wipe configs.
 
-0.9.1-beta 
+## 0.9.1-beta 
  - Fixed Boombox Default Distance
  - Separate Boombox Default Distance and Master Volume
 
-0.9.0-beta Initial Release
+## 0.9.0-beta Initial Release
