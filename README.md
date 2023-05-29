@@ -122,6 +122,8 @@ If the mod fails to play any sort of video file, not just YouTube - Please check
 No need to use an external server now, but it's still there if you want it. yt-dlp may often return more consistently and with better quality videos. 
 There is also the self-hosted benefit.
 
+To expose NodeJS server config settings, set API type to NodeJS and run the plugin once. It will populate your config with new settings to allow setup of NodeJS. We hide these to avoid player confusion when using YoutubeExplode. 
+
 [Tutorial Video](https://www.youtube.com/watch?v=9_vs8MItO38)
 
 Setup of YouTube functionality is a little more involved. 
