@@ -189,7 +189,7 @@ namespace OdinOnDemand
                 var tex = valMediaAssets.LoadAsset<Texture2D>("assets/MOD ICONS/" + properName + "icon.png");
                 var mySprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), Vector2.zero);
                 c.Icon = mySprite; //TODO: procedural icon generation
-                Jotunn.Logger.LogInfo("Adding recipe for " + properName);
+                //Jotunn.Logger.LogInfo("Adding recipe for " + properName);
                 PieceManager.Instance.AddPiece(new CustomPiece(valMediaAssets, properName, false, c));
                 var preloadAsset = PrefabManager.Instance.GetPrefab(properName);
                 
