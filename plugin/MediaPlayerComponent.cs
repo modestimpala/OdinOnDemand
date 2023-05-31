@@ -495,7 +495,7 @@ namespace OdinOnDemand
                         UIController.UpdatePlaylistInfo();
                         if (url.Contains("?list=") || url.Contains("&list="))
                         {
-                            SetPlaylist(url);
+                            SetPlaylist(UnparsedURL);
                             return;
                         }
                         
@@ -512,38 +512,43 @@ namespace OdinOnDemand
         {
             if (PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.Radio)
             {
+                //check if url is audio file
+                if (url.Contains(".mp3") || url.Contains(".wav") || url.Contains(".ogg") || url.Contains(".flac") || url.Contains(".m4a") || url.Contains(".aac"))
+                {
+                    PlayerSettings.playerLinkType = PlayerSettings.LinkType.Direct;
+                    downloadURL = urlGrab.CleanUrl(url);
+                    StartCoroutine(AudioWebRequest());
+                    return;
+                }
+                // check if url is soundcloud
                 if (url.Contains("soundcloud"))
                 {
                     PlayerSettings.playerLinkType = PlayerSettings.LinkType.Soundcloud;
                     PlaySoundcloud(url, true);
                     return;
                 }
-                PlayerSettings.playerLinkType = PlayerSettings.LinkType.Direct;
-                downloadURL = urlGrab.CleanUrl(url);
-                if (downloadURL != null) StartCoroutine(AudioWebRequest());
-                return;
-            }
-
-            //Relative paths for local files
-            var relativeURL = "";
-            if (url.Contains("local:\\\\"))
-            {
-                relativeURL =  Path.Combine(Paths.PluginPath, url).Replace("local:\\\\", "");;
-                            
-            } else if (url.Contains("local://"))
-            {
-                relativeURL =  Path.Combine(Paths.PluginPath, url).Replace("local://", "");;
-                            
-            }
-            if (relativeURL != "")
-            {
-                mScreen.url = relativeURL;
-                PlayerSettings.playerLinkType = PlayerSettings.LinkType.Direct;
-                if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + relativeURL);
             }
             
-            else if (url.Contains("\\") || url.Contains(".") || url.Contains("/"))
+            if (url.Contains("\\") || url.Contains(".") || url.Contains("/"))
             {
+                //Relative paths for local files
+                var relativeURL = "";
+                if (url.Contains("local:\\\\"))
+                {
+                    relativeURL =  Path.Combine(Paths.PluginPath, url).Replace("local:\\\\", "");;
+                            
+                } else if (url.Contains("local://"))
+                {
+                    relativeURL =  Path.Combine(Paths.PluginPath, url).Replace("local://", "");;
+                            
+                }
+                if (relativeURL != "")
+                {
+                    mScreen.url = relativeURL;
+                    PlayerSettings.playerLinkType = PlayerSettings.LinkType.Direct;
+                    if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + relativeURL);
+                }
+                
                 if (url.Contains("youtube.com/watch?v=") || url.Contains("youtube.com/shorts/") ||
                     url.Contains("youtu.be") && OODConfig.IsYtEnabled.Value)
                 {
@@ -553,16 +558,7 @@ namespace OdinOnDemand
                         mAudio.loop = true;
                     }
                     PlayerSettings.playerLinkType = PlayerSettings.LinkType.Youtube;
-                    if (OODConfig.YoutubeAPI.Value == OODConfig.YouTubeAPI.YouTubeExplode)
-                    {
-                            
-                        StartYoutubeAsync(url, true);
-                    }
-                    else
-                    {
-                        youtubeURLNode = url;
-                        StartCoroutine(YoutubeNodeQuery(true));
-                    }
+                    PlayYoutube(url);
                 }
                 else
                 {
@@ -713,7 +709,7 @@ namespace OdinOnDemand
                 UIController.loadingIndicatorObj.SetActive(true);
             }
             var yt = await urlGrab.GetYoutubeExplode(url);
-
+            
             if (yt != null)
             {
                 if (yt.Contains("Timeout"))

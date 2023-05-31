@@ -63,7 +63,7 @@ namespace OdinOnDemand.Utils
                     switch (package.type)
                     {
                         case RPCDataType.SetVideoUrl:
-                            mp.RPC_BoomboxPlayVideo(package.data.url);
+                            mp.RPC_SetURL(package.data.url);
                             break;
                         case RPCDataType.SetAudioUrl:
                             mp.RPC_SetURL(package.data.url, true);
