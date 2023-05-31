@@ -1019,6 +1019,11 @@ namespace OdinOnDemand.Utils
             if(loadingIndicatorObj) loadingIndicatorText.text = text;
         }
         
+        public void SetLoadingIndicatorActive(bool active)
+        {
+            if(loadingIndicatorObj) loadingIndicatorObj.SetActive(active);
+        }
+        
         public void ResetLoadingIndicatorText()
         {
             if (loadingIndicatorObj)
