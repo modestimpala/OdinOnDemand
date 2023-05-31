@@ -25,13 +25,13 @@ namespace OdinOnDemand
     {
         public const string PluginGUID = "com.ood.valmedia";
         public const string PluginName = "OdinOnDemand";
-        public const string PluginVersion = "0.9.85";
+        public const string PluginVersion = "0.9.86";
 
         private static readonly CustomLocalization Localization = LocalizationManager.Instance.GetLocalization();
         public static readonly RpcHandler RPCHandlers = new RpcHandler();
-        public static Material screenMaterial;
-        public static Dictionary<string, Sprite> uiSprites;
-        private AssetBundle valMediaAssets;
+        public static Material MainScreenMat;
+        public static Dictionary<string, Sprite> UISprites;
+        private AssetBundle _valMediaAssets;
 
         private void Awake()
         {
@@ -60,12 +60,12 @@ namespace OdinOnDemand
             // Load asset bundle from the filesystem, setup sprite textures
             if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Vulkan)
             {
-                valMediaAssets = AssetUtils.LoadAssetBundleFromResources("videoplayers", typeof(OdinOnDemandPlugin).Assembly);
+                _valMediaAssets = AssetUtils.LoadAssetBundleFromResources("videoplayers", typeof(OdinOnDemandPlugin).Assembly);
                 Jotunn.Logger.LogDebug("Loading OdinOnDemand Assets");
             }
             else
             {
-                valMediaAssets =
+                _valMediaAssets =
                     AssetUtils.LoadAssetBundleFromResources("videoplayersvulkan", typeof(OdinOnDemandPlugin).Assembly);
                 Jotunn.Logger.LogDebug("Loading Vulkan OdinOnDemand Assets");
             }
@@ -73,21 +73,21 @@ namespace OdinOnDemand
             AddRecipes();
 
             //Master screen material
-            screenMaterial = valMediaAssets.LoadAsset<Material>("assets/MOD MATS/screenmaterial.mat");
+            MainScreenMat = _valMediaAssets.LoadAsset<Material>("assets/MOD MATS/screenmaterial.mat");
             // ui assets setup
-            uiSprites = new Dictionary<string, Sprite>();
-            foreach (var asset in valMediaAssets.GetAllAssetNames())
+            UISprites = new Dictionary<string, Sprite>();
+            foreach (var asset in _valMediaAssets.GetAllAssetNames())
             {
                 if (asset.Contains("modui"))
                 {
                     //Jotunn.Logger.LogInfo(asset);
-                    var sprite = valMediaAssets.LoadAsset<Sprite>(asset);
-                    uiSprites.Add(sprite.name, sprite);
+                    var sprite = _valMediaAssets.LoadAsset<Sprite>(asset);
+                    UISprites.Add(sprite.name, sprite);
                 }
             }
             
             //unload assetbundle after we have our assets
-            valMediaAssets.Unload(false);
+            _valMediaAssets.Unload(false);
         }
         
         private void AddRecipes()
@@ -170,11 +170,11 @@ namespace OdinOnDemand
             };
             
             remoteConfig.AddRequirement(new RequirementConfig("Bronze", 1));
-            var tex = valMediaAssets.LoadAsset<Texture2D>("assets/MOD ICONS/remoteicon.png");
+            var tex = _valMediaAssets.LoadAsset<Texture2D>("assets/MOD ICONS/remoteicon.png");
             var mySprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), Vector2.zero);
             remoteConfig.Icons.AddItem(mySprite);
             
-            var remoteItem = new CustomItem(valMediaAssets, "remote", false, remoteConfig);
+            var remoteItem = new CustomItem(_valMediaAssets, "remote", false, remoteConfig);
             ItemManager.Instance.AddItem(remoteItem);
             var preloadAsset = PrefabManager.Instance.GetPrefab("remote");
             preloadAsset.transform.Find("attach").gameObject.AddComponent<RemoteControlItem>();
@@ -186,11 +186,11 @@ namespace OdinOnDemand
             pieceConfigs.ForEach(c =>
             {
                 var properName = LocalizationManager.Instance.TryTranslate(c.Name).ToLower().Replace(" ", "");
-                var tex = valMediaAssets.LoadAsset<Texture2D>("assets/MOD ICONS/" + properName + "icon.png");
+                var tex = _valMediaAssets.LoadAsset<Texture2D>("assets/MOD ICONS/" + properName + "icon.png");
                 var mySprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), Vector2.zero);
                 c.Icon = mySprite; //TODO: procedural icon generation
                 //Jotunn.Logger.LogInfo("Adding recipe for " + properName);
-                PieceManager.Instance.AddPiece(new CustomPiece(valMediaAssets, properName, false, c));
+                PieceManager.Instance.AddPiece(new CustomPiece(_valMediaAssets, properName, false, c));
                 var preloadAsset = PrefabManager.Instance.GetPrefab(properName);
                 
                 if(properName.Contains("speaker"))

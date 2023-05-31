@@ -67,10 +67,10 @@ namespace OdinOnDemand.Utils
         {
             oodResources = new DefaultControls.Resources
             {
-                knob = OdinOnDemandPlugin.uiSprites["handle"],
-                background = OdinOnDemandPlugin.uiSprites["background"],
-                standard = OdinOnDemandPlugin.uiSprites["fill"],
-                checkmark = OdinOnDemandPlugin.uiSprites["checkmark"]
+                knob = OdinOnDemandPlugin.UISprites["handle"],
+                background = OdinOnDemandPlugin.UISprites["background"],
+                standard = OdinOnDemandPlugin.UISprites["fill"],
+                checkmark = OdinOnDemandPlugin.UISprites["checkmark"]
             };
         }
 
@@ -235,7 +235,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 var icon = iconObj.AddComponent<Image>();
-                icon.sprite = OdinOnDemandPlugin.uiSprites["play"];
+                icon.sprite = OdinOnDemandPlugin.UISprites["play"];
 
                 // PAUSE
                 pauseButton = GUIManager.Instance.CreateButton(
@@ -256,7 +256,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = OdinOnDemandPlugin.uiSprites["pause"];
+                icon.sprite = OdinOnDemandPlugin.UISprites["pause"];
 
                 //STOP
                 stopButton = GUIManager.Instance.CreateButton(
@@ -277,7 +277,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = OdinOnDemandPlugin.uiSprites["stop"];
+                icon.sprite = OdinOnDemandPlugin.UISprites["stop"];
 
                 //FAST FORWARD
                 trackForwardButton = GUIManager.Instance.CreateButton(
@@ -298,7 +298,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = OdinOnDemandPlugin.uiSprites["fastforward"];
+                icon.sprite = OdinOnDemandPlugin.UISprites["fastforward"];
 
                 //MUTE
                 toggleMuteButton = GUIManager.Instance.CreateButton(
@@ -319,7 +319,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = OdinOnDemandPlugin.uiSprites["volume"];
+                icon.sprite = OdinOnDemandPlugin.UISprites["volume"];
                 unmutedVolumeObj = iconObj;
                 iconObj = new GameObject("iconMuted")
                 {
@@ -331,7 +331,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = OdinOnDemandPlugin.uiSprites["mute"];
+                icon.sprite = OdinOnDemandPlugin.UISprites["mute"];
                 mutedVolumeObj = iconObj;
                 toggleMuteButton.GetComponent<Image>().enabled = false;
                 mutedVolumeObj.SetActive(false);
@@ -510,7 +510,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = OdinOnDemandPlugin.uiSprites["next"];
+                icon.sprite = OdinOnDemandPlugin.UISprites["next"];
                 skipPlaylistTrackButton.SetActive(false);
                 skipPlaylistTrackObj = skipPlaylistTrackButton;
 
@@ -532,7 +532,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = OdinOnDemandPlugin.uiSprites["previous"];
+                icon.sprite = OdinOnDemandPlugin.UISprites["previous"];
                 previousPlaylistTrackButton.SetActive(false);
                 previousPlaylistTrackObj = previousPlaylistTrackButton;
 
@@ -564,7 +564,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = OdinOnDemandPlugin.uiSprites["lock"];
+                icon.sprite = OdinOnDemandPlugin.UISprites["lock"];
                 lockedIconObj = iconObj;
                 iconObj = new GameObject("unlockedIcon")
                 {
@@ -576,7 +576,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = OdinOnDemandPlugin.uiSprites["unlock"];
+                icon.sprite = OdinOnDemandPlugin.UISprites["unlock"];
                 unlockedIconObj = iconObj;
                 unlockedIconObj.SetActive(false);
 
@@ -602,7 +602,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = OdinOnDemandPlugin.uiSprites["settings"];
+                icon.sprite = OdinOnDemandPlugin.UISprites["settings"];
 
                 var settingsButtonAction = settingsCogButton.GetComponent<Button>();
                 settingsButtonAction.onClick.AddListener(ToggleSettingsPanel);

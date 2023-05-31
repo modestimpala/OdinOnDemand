@@ -286,7 +286,7 @@ namespace OdinOnDemand
                 RenderTexture = new RenderTexture(1920, 1080, 0, RenderTextureFormat.ARGB32);
                 RenderTexture.Create();
                 RenderTexture.Release();
-                targetTexMat = new Material(OdinOnDemandPlugin.screenMaterial.shader)
+                targetTexMat = new Material(OdinOnDemandPlugin.MainScreenMat.shader)
                 {
                     mainTexture = RenderTexture
                 };
@@ -521,7 +521,7 @@ namespace OdinOnDemand
                     return;
                 }
                 // check if url is soundcloud
-                if (url.Contains("soundcloud"))
+                if (url.Contains("soundcloud.com/"))
                 {
                     PlayerSettings.playerLinkType = PlayerSettings.LinkType.Soundcloud;
                     PlaySoundcloud(url, true);
