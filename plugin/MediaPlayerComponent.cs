@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics.Eventing.Reader;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -474,12 +475,12 @@ namespace OdinOnDemand
             urlGrab.Reset();
         }
 
-        public void SetURL(string url, bool isRPC = false, bool playVideo = true) //Set the video URL, with optional RPC and play on set
+        public void SetURL(string url) //Set the video URL, with optional RPC and play on set
         {
             UnparsedURL = url; //Save the unparsed url for later use
 
-            // If we're on a server, just send RPC. It will be sent back to us and we'll handle it there.
-            if (ZNet.instance.IsClientInstance() && !isRPC && UnparsedURL != null)
+            // Just send RPC. It will be sent back to us and we'll handle it there.
+            if (UnparsedURL != null)
             {
                 if (url.Contains("soundcloud") && PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.Radio)
                 {
@@ -504,116 +505,6 @@ namespace OdinOnDemand
                 }
 
                 rpc.SendData(CinemaPackage.RPCDataType.SetVideoUrl, PlayerSettings.PlayerType, gameObject.transform.position, UnparsedURL);
-                 
-                return;
-            }
-            
-            //Otherwise on singleplayer just set the url normally
-            if (url != null)
-            {
-                //Soundcloud
-                if (url.Contains("soundcloud") && PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.Radio)
-                {
-                    PlayerSettings.playerLinkType = PlayerSettings.LinkType.Soundcloud;
-                    PlaySoundcloud(url, isRPC);
-                    return;
-                }
-
-                if (mScreen != null || mAudio != null) 
-                {
-                    //Youtube
-                    if (url.Contains("youtube.com/watch?v=") || url.Contains("youtube.com/shorts/") ||
-                        url.Contains("youtu.be") || url.Contains("youtube.com/playlist"))
-                    {
-                        PlayerSettings.playerLinkType = PlayerSettings.LinkType.Youtube;
-                        UIController.UpdatePlaylistInfo();
-
-                        //Playlists
-                        if (url.Contains("?list=") || url.Contains("&list="))
-                        {
-                            SetPlaylist(url);
-                            return;
-                        }
-
-                        if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing youtube: " + url);
-                        if(UIController.loadingIndicatorObj) UIController.loadingIndicatorObj.GetComponent<Text>().text = "Processing";
-                
-                        PlayYoutube(url);
-                        return;
-                    }
-                    
-                    // Direct links of all other types
-                    if (url.Contains("\\") || url.Contains(".") || url.Contains("/"))
-                    {
-                        PlayerSettings.playerLinkType = PlayerSettings.LinkType.Direct;
-                        //Radio logic
-                        if (PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.Radio)
-                        {
-                            //This shouldn't be needed anymore since we store raw links TODO: Remove and test
-                            if (url.Contains("googlevideo.com/videoplayback?"))
-                            {
-                                PlayerSettings.playerLinkType = PlayerSettings.LinkType.Youtube;
-                                mScreen.url = url;
-                                mScreen.Prepare();
-                                return;
-                            }
-                            
-                            downloadURL = urlGrab.CleanUrl(url);
-                            if (downloadURL != null)
-                            {
-                                StartCoroutine(AudioWebRequest());
-                                return;
-                            }
-                            
-                            Logger.LogDebug("download url is null");
-                            return;
-                        }
-                        
-                        //Cinemascreen logic
-                        
-                        //Creating relative paths for local files
-                        mScreen.url = null;
-                        var relativeURL = "";
-                        if (url.Contains("local:\\\\"))
-                        {
-                            relativeURL =  Path.Combine(Paths.PluginPath, url).Replace("local:\\\\", "");;
-                            
-                        } else if (url.Contains("local://"))
-                        {
-                            relativeURL =  Path.Combine(Paths.PluginPath, url).Replace("local://", "");;
-                            
-                        }
-
-                        if (relativeURL != "")
-                        {
-                            mScreen.url = relativeURL;
-                            if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + relativeURL);
-                        }
-                        else
-                        {
-                            mScreen.url = url;
-                            if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + url);
-                        }
-                        
-                        mScreen.Prepare();
-                        if (screenUICanvasObj && loadingCircleObj)
-                        {
-                            screenUICanvasObj.SetActive(true);
-                            loadingCircleObj.SetActive(true);
-                        }
-                        
-                        //m_screen.transform.Find("Plane").gameObject.SetActive(true);
-                        if (!playVideo) mScreen.Pause();
-                    }
-                    else
-                    {
-                        Logger.LogWarning("Could not play. Is this not a url or local file?");
-                    }
-                }
-                else
-                {
-                    Logger.LogWarning("SetURL Error: can't find the screen!");
-                }
             }
         }
 
