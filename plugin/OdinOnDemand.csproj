@@ -479,6 +479,11 @@
     <ItemGroup>
       <EmbeddedResource Include="Assets\default.json" />
     </ItemGroup>
+    <ItemGroup>
+      <Content Include="..\README.md">
+        <Link>README.md</Link>
+      </Content>
+    </ItemGroup>
     <PropertyGroup>
         <MOD_DEPLOYPATH Condition="!Exists('$(MOD_DEPLOYPATH)')">F:\SteamLibrary\steamapps\common\Valheim\BepInEx\plugins</MOD_DEPLOYPATH>
     </PropertyGroup>
