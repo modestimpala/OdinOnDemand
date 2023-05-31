@@ -2,7 +2,7 @@
 
 namespace OdinOnDemand
 {
-    public class Receiver : MonoBehaviour, Hoverable, Interactable
+    public class ReceiverComponent : MonoBehaviour, Hoverable, Interactable
     {
         public Piece mPiece { get; set; }
         public string mName;

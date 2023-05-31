@@ -6,11 +6,11 @@ using Logger = Jotunn.Logger;
 
 namespace OdinOnDemand
 {
-    internal class RemoteControl : MonoBehaviour
+    internal class RemoteControlItem : MonoBehaviour
     {
         private Camera cam;
         private Player localPlayer;
-        private MediaPlayer mp;
+        private MediaPlayerComponent mp;
 
 
         private void Start()
@@ -42,8 +42,8 @@ namespace OdinOnDemand
                             if (Physics.Raycast(cam.transform.position, cam.transform.forward, out var raycastHit,
                                     OODConfig.RemoteControlDistance.Value, BaseAI.m_solidRayMask))
                             {
-                                mp = raycastHit.transform.gameObject.GetComponent<MediaPlayer>() ??
-                                     raycastHit.transform.gameObject.GetComponentInParent<MediaPlayer>();
+                                mp = raycastHit.transform.gameObject.GetComponent<MediaPlayerComponent>() ??
+                                     raycastHit.transform.gameObject.GetComponentInParent<MediaPlayerComponent>();
                                 
                                 if (mp != null)
                                 {

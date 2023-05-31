@@ -15,7 +15,7 @@ using Logger = Jotunn.Logger;
 
 namespace OdinOnDemand
 {
-    public class MediaPlayer : MonoBehaviour, Hoverable, Interactable
+    public class MediaPlayerComponent : MonoBehaviour, Hoverable, Interactable
     {
         // Main components
         internal string mName = "Media Player";
@@ -45,7 +45,7 @@ namespace OdinOnDemand
         
         private string youtubeURLNode;
         
-        public MediaPlayer()
+        public MediaPlayerComponent()
         {
             UIController = new UIController(this);
             PlayerSettings = new PlayerSettings();
@@ -80,7 +80,7 @@ namespace OdinOnDemand
             
             // Controllers handlers and utils
             UIController.Initialize();
-            rpc = ValMedia.RPCHandlers;
+            rpc = OdinOnDemandPlugin.RPCHandlers;
             urlGrab = new URLGrab();
 
             // Identify and set the type of player
@@ -285,7 +285,7 @@ namespace OdinOnDemand
                 RenderTexture = new RenderTexture(1920, 1080, 0, RenderTextureFormat.ARGB32);
                 RenderTexture.Create();
                 RenderTexture.Release();
-                targetTexMat = new Material(ValMedia.screenMaterial.shader)
+                targetTexMat = new Material(OdinOnDemandPlugin.screenMaterial.shader)
                 {
                     mainTexture = RenderTexture
                 };

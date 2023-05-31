@@ -56,7 +56,7 @@ namespace OdinOnDemand.Utils
                 BlockOtherInputs = false   // Blocks all other input for this Key / Button
             };
             */
-            InputManager.Instance.AddButton(ValMedia.PluginGUID, UseRemoteButton);
+            InputManager.Instance.AddButton(OdinOnDemandPlugin.PluginGUID, UseRemoteButton);
             
             //InputManager.Instance.AddButton(ValMedia.PluginGUID, LinkRemoteButton);
             //InputManager.Instance.AddButton(ValMedia.PluginGUID, ChangeLinkModeButton);

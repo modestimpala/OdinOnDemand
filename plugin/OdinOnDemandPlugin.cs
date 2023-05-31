@@ -21,7 +21,7 @@ namespace OdinOnDemand
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
     [BepInDependency(Main.ModGuid)]
     [NetworkCompatibility(CompatibilityLevel.EveryoneMustHaveMod, VersionStrictness.Minor)]
-    internal class ValMedia : BaseUnityPlugin
+    internal class OdinOnDemandPlugin : BaseUnityPlugin
     {
         public const string PluginGUID = "com.ood.valmedia";
         public const string PluginName = "OdinOnDemand";
@@ -60,13 +60,13 @@ namespace OdinOnDemand
             // Load asset bundle from the filesystem, setup sprite textures
             if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Vulkan)
             {
-                valMediaAssets = AssetUtils.LoadAssetBundleFromResources("videoplayers", typeof(ValMedia).Assembly);
+                valMediaAssets = AssetUtils.LoadAssetBundleFromResources("videoplayers", typeof(OdinOnDemandPlugin).Assembly);
                 Jotunn.Logger.LogDebug("Loading OdinOnDemand Assets");
             }
             else
             {
                 valMediaAssets =
-                    AssetUtils.LoadAssetBundleFromResources("videoplayersvulkan", typeof(ValMedia).Assembly);
+                    AssetUtils.LoadAssetBundleFromResources("videoplayersvulkan", typeof(OdinOnDemandPlugin).Assembly);
                 Jotunn.Logger.LogDebug("Loading Vulkan OdinOnDemand Assets");
             }
             // read / setup piece recipes
@@ -108,7 +108,7 @@ namespace OdinOnDemand
                     else //if it's not valid json or doesn't have the new recipes, load the default recipes
                     {
                         string defaultRecip = "";
-                        using (Stream stream = typeof(ValMedia).Assembly.GetManifestResourceStream("OdinOnDemand.Assets.default.json"))
+                        using (Stream stream = typeof(OdinOnDemandPlugin).Assembly.GetManifestResourceStream("OdinOnDemand.Assets.default.json"))
                         {
                             if (stream != null)
                                 using (var reader = new StreamReader(stream))
@@ -138,7 +138,7 @@ namespace OdinOnDemand
                 {
                     var writer = File.CreateText(file);
                     string defaultRecip = "";
-                    using (Stream stream = typeof(ValMedia).Assembly.GetManifestResourceStream("OdinOnDemand.Assets.default.json"))
+                    using (Stream stream = typeof(OdinOnDemandPlugin).Assembly.GetManifestResourceStream("OdinOnDemand.Assets.default.json"))
                     {
                         if (stream != null)
                             using (var reader = new StreamReader(stream))
@@ -177,7 +177,7 @@ namespace OdinOnDemand
             var remoteItem = new CustomItem(valMediaAssets, "remote", false, remoteConfig);
             ItemManager.Instance.AddItem(remoteItem);
             var preloadAsset = PrefabManager.Instance.GetPrefab("remote");
-            preloadAsset.transform.Find("attach").gameObject.AddComponent<RemoteControl>();
+            preloadAsset.transform.Find("attach").gameObject.AddComponent<RemoteControlItem>();
         }
         
         
@@ -195,15 +195,15 @@ namespace OdinOnDemand
                 
                 if(properName.Contains("speaker"))
                 {
-                    preloadAsset.AddComponent<Speaker>();
+                    preloadAsset.AddComponent<SpeakerComponent>();
                     
                 } else if (properName.Contains("receiver"))
                 {
-                    preloadAsset.AddComponent<Receiver>();
+                    preloadAsset.AddComponent<ReceiverComponent>();
                 }
                 else
                 {
-                    preloadAsset.AddComponent<MediaPlayer>();
+                    preloadAsset.AddComponent<MediaPlayerComponent>();
                 }
             });
         }

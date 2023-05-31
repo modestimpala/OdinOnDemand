@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace OdinOnDemand
 {
-    public class Speaker : MonoBehaviour, Hoverable, Interactable
+    public class SpeakerComponent : MonoBehaviour, Hoverable, Interactable
     {
         public Piece mPiece { get; set; }
         public string mName;

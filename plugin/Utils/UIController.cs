@@ -12,7 +12,7 @@ namespace OdinOnDemand.Utils
 {
     public class UIController
     {
-        private MediaPlayer mediaPlayer;
+        private MediaPlayerComponent mediaPlayerComponent;
         
         internal GameObject loadingIndicatorObj;
         internal GameObject lockedIconObj;
@@ -42,7 +42,7 @@ namespace OdinOnDemand.Utils
         // Loading messages
         public readonly string[] loadingMessages = { "Processing", "Processing.", "Processing..", "Processing..." };
         
-        private RpcHandler rpc  = ValMedia.RPCHandlers;
+        private RpcHandler rpc  = OdinOnDemandPlugin.RPCHandlers;
         private GameObject playButton;
         private GameObject pauseButton;
         private GameObject stopButton;
@@ -58,25 +58,25 @@ namespace OdinOnDemand.Utils
         private GameObject linkedTextObj;
         private Text linkedText;
 
-        public UIController(MediaPlayer mediaPlayer)
+        public UIController(MediaPlayerComponent mediaPlayerComponent)
         {
-            this.mediaPlayer = mediaPlayer;
+            this.mediaPlayerComponent = mediaPlayerComponent;
         }
 
         public void Initialize()
         {
             oodResources = new DefaultControls.Resources
             {
-                knob = ValMedia.uiSprites["handle"],
-                background = ValMedia.uiSprites["background"],
-                standard = ValMedia.uiSprites["fill"],
-                checkmark = ValMedia.uiSprites["checkmark"]
+                knob = OdinOnDemandPlugin.uiSprites["handle"],
+                background = OdinOnDemandPlugin.uiSprites["background"],
+                standard = OdinOnDemandPlugin.uiSprites["fill"],
+                checkmark = OdinOnDemandPlugin.uiSprites["checkmark"]
             };
         }
 
         private void ToggleMute()
         {
-            if (mediaPlayer.mAudio.volume > 0f)
+            if (mediaPlayerComponent.mAudio.volume > 0f)
             {
                 if (mutedVolumeObj != null)
                 {
@@ -84,11 +84,11 @@ namespace OdinOnDemand.Utils
                     mutedVolumeObj.SetActive(true);
                 }
 
-                mediaPlayer.PlayerSettings.MuteVol = mediaPlayer.mAudio.volume;
-                mediaPlayer.PlayerSettings.Volume = 0f;
+                mediaPlayerComponent.PlayerSettings.MuteVol = mediaPlayerComponent.mAudio.volume;
+                mediaPlayerComponent.PlayerSettings.Volume = 0f;
                 //float floatVol = ((float)volume) / 100f;
-                mediaPlayer.mAudio.volume = mediaPlayer.PlayerSettings.Volume;
-                volumeSlider.value = mediaPlayer.PlayerSettings.Volume;
+                mediaPlayerComponent.mAudio.volume = mediaPlayerComponent.PlayerSettings.Volume;
+                volumeSlider.value = mediaPlayerComponent.PlayerSettings.Volume;
             }
             else
             {
@@ -98,46 +98,46 @@ namespace OdinOnDemand.Utils
                     mutedVolumeObj.SetActive(false);
                 }
 
-                mediaPlayer.PlayerSettings.Volume = mediaPlayer.PlayerSettings.MuteVol;
-                mediaPlayer.mAudio.volume = mediaPlayer.PlayerSettings.Volume;
-                volumeSlider.value = mediaPlayer.PlayerSettings.Volume;
+                mediaPlayerComponent.PlayerSettings.Volume = mediaPlayerComponent.PlayerSettings.MuteVol;
+                mediaPlayerComponent.mAudio.volume = mediaPlayerComponent.PlayerSettings.Volume;
+                volumeSlider.value = mediaPlayerComponent.PlayerSettings.Volume;
             }
         }
 
         internal void UpdatePlaylistInfo()
         {
-            if (mediaPlayer.PlayerSettings.IsPlayingPlaylist)
+            if (mediaPlayerComponent.PlayerSettings.IsPlayingPlaylist)
                 if (selectionPanelObj)
                 {
-                    var length = mediaPlayer.CurrentPlaylist.ElementAt(mediaPlayer.PlaylistPosition).Title.Length;
+                    var length = mediaPlayerComponent.CurrentPlaylist.ElementAt(mediaPlayerComponent.PlaylistPosition).Title.Length;
                     if (length > 14) length = 14;
-                    if (!mediaPlayer.PlayerSettings.IsShuffling)
+                    if (!mediaPlayerComponent.PlayerSettings.IsShuffling)
                     {
-                        mediaPlayer.PlaylistString = mediaPlayer.PlaylistString = mediaPlayer.CurrentPlaylist.ElementAt(mediaPlayer.PlaylistPosition).Title;
-                        mediaPlayer.PlaylistString = "Playing '" + mediaPlayer.CurrentPlaylist.ElementAt(mediaPlayer.PlaylistPosition).Title
+                        mediaPlayerComponent.PlaylistString = mediaPlayerComponent.PlaylistString = mediaPlayerComponent.CurrentPlaylist.ElementAt(mediaPlayerComponent.PlaylistPosition).Title;
+                        mediaPlayerComponent.PlaylistString = "Playing '" + mediaPlayerComponent.CurrentPlaylist.ElementAt(mediaPlayerComponent.PlaylistPosition).Title
                             .Substring(0, length) + "...' ";
-                        playlistIndexObj.GetComponent<Text>().text = mediaPlayer.PlaylistPosition + 1 + "/" + mediaPlayer.CurrentPlaylist.Count;
-                        playlistTrackText.text = mediaPlayer.PlaylistString;
+                        playlistIndexObj.GetComponent<Text>().text = mediaPlayerComponent.PlaylistPosition + 1 + "/" + mediaPlayerComponent.CurrentPlaylist.Count;
+                        playlistTrackText.text = mediaPlayerComponent.PlaylistString;
                     }
                     else
                     {
-                        mediaPlayer.PlaylistString = mediaPlayer.PlaylistString = mediaPlayer.CurrentPlaylist.ElementAt(mediaPlayer.PlaylistPosition).Title;
-                        mediaPlayer.PlaylistString = "Playing '" + mediaPlayer.CurrentPlaylist.ElementAt(mediaPlayer.PlaylistPosition).Title
+                        mediaPlayerComponent.PlaylistString = mediaPlayerComponent.PlaylistString = mediaPlayerComponent.CurrentPlaylist.ElementAt(mediaPlayerComponent.PlaylistPosition).Title;
+                        mediaPlayerComponent.PlaylistString = "Playing '" + mediaPlayerComponent.CurrentPlaylist.ElementAt(mediaPlayerComponent.PlaylistPosition).Title
                             .Substring(0, length) + "...' ";
-                        playlistIndexObj.GetComponent<Text>().text = mediaPlayer.PlaylistPosition + 1 + "/" + mediaPlayer.CurrentPlaylist.Count + ", (shuffled)";
-                        playlistTrackText.text = mediaPlayer.PlaylistString;
+                        playlistIndexObj.GetComponent<Text>().text = mediaPlayerComponent.PlaylistPosition + 1 + "/" + mediaPlayerComponent.CurrentPlaylist.Count + ", (shuffled)";
+                        playlistTrackText.text = mediaPlayerComponent.PlaylistString;
                     }
                 }
         }
 
         public void UpdatePlaylistUI()
         {
-            playlistStringObj.SetActive(mediaPlayer.PlayerSettings.IsPlayingPlaylist);
-            skipPlaylistTrackObj.SetActive(mediaPlayer.PlayerSettings.IsPlayingPlaylist);
-            previousPlaylistTrackObj.SetActive(mediaPlayer.PlayerSettings.IsPlayingPlaylist);
-            toggleShuffleObj.SetActive(mediaPlayer.PlayerSettings.IsPlayingPlaylist);
-            toggleShuffleTextObj.SetActive(mediaPlayer.PlayerSettings.IsPlayingPlaylist);
-            playlistIndexObj.SetActive(mediaPlayer.PlayerSettings.IsPlayingPlaylist);
+            playlistStringObj.SetActive(mediaPlayerComponent.PlayerSettings.IsPlayingPlaylist);
+            skipPlaylistTrackObj.SetActive(mediaPlayerComponent.PlayerSettings.IsPlayingPlaylist);
+            previousPlaylistTrackObj.SetActive(mediaPlayerComponent.PlayerSettings.IsPlayingPlaylist);
+            toggleShuffleObj.SetActive(mediaPlayerComponent.PlayerSettings.IsPlayingPlaylist);
+            toggleShuffleTextObj.SetActive(mediaPlayerComponent.PlayerSettings.IsPlayingPlaylist);
+            playlistIndexObj.SetActive(mediaPlayerComponent.PlayerSettings.IsPlayingPlaylist);
         }
 
         public void SetPlaylistUIActive(bool state)
@@ -235,7 +235,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 var icon = iconObj.AddComponent<Image>();
-                icon.sprite = ValMedia.uiSprites["play"];
+                icon.sprite = OdinOnDemandPlugin.uiSprites["play"];
 
                 // PAUSE
                 pauseButton = GUIManager.Instance.CreateButton(
@@ -256,7 +256,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = ValMedia.uiSprites["pause"];
+                icon.sprite = OdinOnDemandPlugin.uiSprites["pause"];
 
                 //STOP
                 stopButton = GUIManager.Instance.CreateButton(
@@ -277,7 +277,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = ValMedia.uiSprites["stop"];
+                icon.sprite = OdinOnDemandPlugin.uiSprites["stop"];
 
                 //FAST FORWARD
                 trackForwardButton = GUIManager.Instance.CreateButton(
@@ -298,7 +298,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = ValMedia.uiSprites["fastforward"];
+                icon.sprite = OdinOnDemandPlugin.uiSprites["fastforward"];
 
                 //MUTE
                 toggleMuteButton = GUIManager.Instance.CreateButton(
@@ -319,7 +319,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = ValMedia.uiSprites["volume"];
+                icon.sprite = OdinOnDemandPlugin.uiSprites["volume"];
                 unmutedVolumeObj = iconObj;
                 iconObj = new GameObject("iconMuted")
                 {
@@ -331,7 +331,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = ValMedia.uiSprites["mute"];
+                icon.sprite = OdinOnDemandPlugin.uiSprites["mute"];
                 mutedVolumeObj = iconObj;
                 toggleMuteButton.GetComponent<Image>().enabled = false;
                 mutedVolumeObj.SetActive(false);
@@ -347,7 +347,7 @@ namespace OdinOnDemand.Utils
                 volumeSliderObj.transform.localPosition = new Vector3(100f, 15f, 0f);
                 volumeSliderObj.transform.localScale = new Vector3(0.4f, 1.4f, 1.17f);
                 var slider = volumeSliderObj.GetComponent<Slider>();
-                slider.value = mediaPlayer.PlayerSettings.Volume;
+                slider.value = mediaPlayerComponent.PlayerSettings.Volume;
                 volumeSlider = slider;
 
                 slider.onValueChanged.AddListener(OnVolumeSliderChanged);
@@ -439,19 +439,19 @@ namespace OdinOnDemand.Utils
                 var setButtonAction = setButton.GetComponent<Button>();
                 setButtonAction.onClick.AddListener(() =>
                 {
-                    mediaPlayer.SetURL(inputUrl.text);
-                    mediaPlayer.CurrentPlaylist = null;
-                    mediaPlayer.PlayerSettings.IsPlayingPlaylist = false;
+                    mediaPlayerComponent.SetURL(inputUrl.text);
+                    mediaPlayerComponent.CurrentPlaylist = null;
+                    mediaPlayerComponent.PlayerSettings.IsPlayingPlaylist = false;
                 });
                 //play 
                 var playButtonAction = playButton.GetComponent<Button>();
-                playButtonAction.onClick.AddListener(() => { mediaPlayer.Play(); });
+                playButtonAction.onClick.AddListener(() => { mediaPlayerComponent.Play(); });
                 //pause
                 var pauseButtonAction = pauseButton.GetComponent<Button>();
-                pauseButtonAction.onClick.AddListener(() => { mediaPlayer.Pause(); });
+                pauseButtonAction.onClick.AddListener(() => { mediaPlayerComponent.Pause(); });
                 //stop
                 var stopButtonAction = stopButton.GetComponent<Button>();
-                stopButtonAction.onClick.AddListener(() => { mediaPlayer.Stop(); });
+                stopButtonAction.onClick.AddListener(() => { mediaPlayerComponent.Stop(); });
 
                 var trackForwardAction = trackForwardButton.GetComponent<Button>();
                 trackForwardAction.onClick.AddListener(ToggleTrackForward);
@@ -510,7 +510,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = ValMedia.uiSprites["next"];
+                icon.sprite = OdinOnDemandPlugin.uiSprites["next"];
                 skipPlaylistTrackButton.SetActive(false);
                 skipPlaylistTrackObj = skipPlaylistTrackButton;
 
@@ -532,7 +532,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = ValMedia.uiSprites["previous"];
+                icon.sprite = OdinOnDemandPlugin.uiSprites["previous"];
                 previousPlaylistTrackButton.SetActive(false);
                 previousPlaylistTrackObj = previousPlaylistTrackButton;
 
@@ -564,7 +564,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = ValMedia.uiSprites["lock"];
+                icon.sprite = OdinOnDemandPlugin.uiSprites["lock"];
                 lockedIconObj = iconObj;
                 iconObj = new GameObject("unlockedIcon")
                 {
@@ -576,7 +576,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = ValMedia.uiSprites["unlock"];
+                icon.sprite = OdinOnDemandPlugin.uiSprites["unlock"];
                 unlockedIconObj = iconObj;
                 unlockedIconObj.SetActive(false);
 
@@ -602,7 +602,7 @@ namespace OdinOnDemand.Utils
                     }
                 };
                 icon = iconObj.AddComponent<Image>();
-                icon.sprite = ValMedia.uiSprites["settings"];
+                icon.sprite = OdinOnDemandPlugin.uiSprites["settings"];
 
                 var settingsButtonAction = settingsCogButton.GetComponent<Button>();
                 settingsButtonAction.onClick.AddListener(ToggleSettingsPanel);
@@ -615,17 +615,17 @@ namespace OdinOnDemand.Utils
         {
             CreateSettingsGUI();
 
-            mediaPlayer.PlayerSettings.IsSettingsGuiActive = !settingsPanelObj.activeSelf;
+            mediaPlayerComponent.PlayerSettings.IsSettingsGuiActive = !settingsPanelObj.activeSelf;
             if (settingsPanelObj)
             {
-                masterVolumeSliderComponent.value = mediaPlayer.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen
+                masterVolumeSliderComponent.value = mediaPlayerComponent.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen
                     ? OODConfig.MasterVolumeScreen.Value
                     : OODConfig.MasterVolumeMusicplayer.Value;
-                autoplayToggle.isOn = mediaPlayer.PlayerSettings.AutoPlay;
-                if (adminOnlyToggle) adminOnlyToggle.isOn = mediaPlayer.PlayerSettings.AdminOnly;
+                autoplayToggle.isOn = mediaPlayerComponent.PlayerSettings.AutoPlay;
+                if (adminOnlyToggle) adminOnlyToggle.isOn = mediaPlayerComponent.PlayerSettings.AdminOnly;
             }
 
-            settingsPanelObj.SetActive(mediaPlayer.PlayerSettings.IsSettingsGuiActive);
+            settingsPanelObj.SetActive(mediaPlayerComponent.PlayerSettings.IsSettingsGuiActive);
         }
 
         private void CreateSettingsGUI()
@@ -689,7 +689,7 @@ namespace OdinOnDemand.Utils
                 autoplayToggleObj.transform.SetParent(contentTransform, false);
                 var text = autoplayToggleObj.transform.Find("Label").GetComponent<Text>();
                 autoplayToggle = autoplayToggleObj.GetComponent<Toggle>();
-                autoplayToggle.isOn = mediaPlayer.PlayerSettings.AutoPlay;
+                autoplayToggle.isOn = mediaPlayerComponent.PlayerSettings.AutoPlay;
                 autoplayToggle.onValueChanged.AddListener(OnAutoplayToggleChanged);
                 GUIManager.Instance.ApplyTextStyle(text, GUIManager.Instance.AveriaSerifBold,
                     GUIManager.Instance.ValheimOrange);
@@ -707,7 +707,7 @@ namespace OdinOnDemand.Utils
                     adminOnlyToggleObj.transform.SetParent(contentTransform, false);
                     var t = adminOnlyToggleObj.transform.Find("Label").GetComponent<Text>();
                     adminOnlyToggle = adminOnlyToggleObj.GetComponent<Toggle>();
-                    adminOnlyToggle.isOn = mediaPlayer.PlayerSettings.AdminOnly;
+                    adminOnlyToggle.isOn = mediaPlayerComponent.PlayerSettings.AdminOnly;
                     adminOnlyToggle.onValueChanged.AddListener(OnAdminOnlyToggleChanged);
                     GUIManager.Instance.ApplyTextStyle(t, GUIManager.Instance.AveriaSerifBold,
                         GUIManager.Instance.ValheimOrange);
@@ -740,7 +740,7 @@ namespace OdinOnDemand.Utils
                     120f,
                     18f,
                     false);
-                var str = mediaPlayer.mAudio.maxDistance.ToString(CultureInfo.CurrentCulture);
+                var str = mediaPlayerComponent.mAudio.maxDistance.ToString(CultureInfo.CurrentCulture);
                 var inputObj = GUIManager.Instance.CreateInputField(
                     panel.transform,
                     new Vector2(0.5f, 0.5f),
@@ -785,7 +785,7 @@ namespace OdinOnDemand.Utils
                 masterVolumeSliderComponent = sliderObj.GetComponent<Slider>();
                 masterVolumeSliderComponent.maxValue = 15f;
                 masterVolumeSliderComponent.minValue = -15f;
-                masterVolumeSliderComponent.value = mediaPlayer.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen
+                masterVolumeSliderComponent.value = mediaPlayerComponent.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen
                     ? OODConfig.MasterVolumeScreen.Value
                     : OODConfig.MasterVolumeMusicplayer.Value;
                 masterVolumeSliderComponent.onValueChanged.AddListener(OnMasterVolumeChanged);
@@ -795,17 +795,17 @@ namespace OdinOnDemand.Utils
 
         private void ToggleLock()
         {
-            mediaPlayer.PlayerSettings.IsLocked = !mediaPlayer.PlayerSettings.IsLocked;
+            mediaPlayerComponent.PlayerSettings.IsLocked = !mediaPlayerComponent.PlayerSettings.IsLocked;
             UpdateLockIcon();
-            mediaPlayer.SaveZDO();
-            rpc.SendData(CinemaPackage.RPCDataType.UpdateZDO, mediaPlayer.PlayerSettings.PlayerType, mediaPlayer.gameObject.transform.position);
+            mediaPlayerComponent.SaveZDO();
+            rpc.SendData(CinemaPackage.RPCDataType.UpdateZDO, mediaPlayerComponent.PlayerSettings.PlayerType, mediaPlayerComponent.gameObject.transform.position);
         }
 
         private void UpdateLockIcon()
         {
             if (selectionPanelObj)
             {
-                if (mediaPlayer.PlayerSettings.IsLocked)
+                if (mediaPlayerComponent.PlayerSettings.IsLocked)
                 {
                     lockedIconObj.SetActive(true);
                     unlockedIconObj.SetActive(false);
@@ -820,7 +820,7 @@ namespace OdinOnDemand.Utils
 
         private void OnVolumeSliderChanged(float vol)
         {
-            mediaPlayer.mAudio.volume = vol;
+            mediaPlayerComponent.mAudio.volume = vol;
             if (vol <= 0f)
             {
                 unmutedVolumeObj.SetActive(false);
@@ -835,11 +835,11 @@ namespace OdinOnDemand.Utils
 
         private void OnAutoplayToggleChanged(bool toggleValue)
         {
-            mediaPlayer.PlayerSettings.AutoPlay = toggleValue;
-            mediaPlayer.SaveZDO();
-            if (mediaPlayer.UnparsedURL != null) mediaPlayer.ZNetView.GetZDO().Set("url", mediaPlayer.PlayerSettings.AutoPlay ? mediaPlayer.UnparsedURL : "");
+            mediaPlayerComponent.PlayerSettings.AutoPlay = toggleValue;
+            mediaPlayerComponent.SaveZDO();
+            if (mediaPlayerComponent.UnparsedURL != null) mediaPlayerComponent.ZNetView.GetZDO().Set("url", mediaPlayerComponent.PlayerSettings.AutoPlay ? mediaPlayerComponent.UnparsedURL : "");
 
-            rpc.SendData(CinemaPackage.RPCDataType.UpdateZDO, mediaPlayer.PlayerSettings.PlayerType, mediaPlayer.gameObject.transform.position);
+            rpc.SendData(CinemaPackage.RPCDataType.UpdateZDO, mediaPlayerComponent.PlayerSettings.PlayerType, mediaPlayerComponent.gameObject.transform.position);
         }
 
         private void OnAudioDistanceInputEndEdit(string input)
@@ -849,21 +849,21 @@ namespace OdinOnDemand.Utils
             if (parse == 0f) parse = 0.01f;
             if (parse > OODConfig.MaxListeningDistance.Value && !SynchronizationManager.Instance.PlayerIsAdmin)
                 parse = OODConfig.MaxListeningDistance.Value;
-            mediaPlayer.mAudio.maxDistance = parse;
-            mediaPlayer.SaveZDO();
-            rpc.SendData(CinemaPackage.RPCDataType.UpdateZDO, mediaPlayer.PlayerSettings.PlayerType, mediaPlayer.gameObject.transform.position);
+            mediaPlayerComponent.mAudio.maxDistance = parse;
+            mediaPlayerComponent.SaveZDO();
+            rpc.SendData(CinemaPackage.RPCDataType.UpdateZDO, mediaPlayerComponent.PlayerSettings.PlayerType, mediaPlayerComponent.gameObject.transform.position);
         }
 
         private void OnAdminOnlyToggleChanged(bool toggleValue)
         {
-            mediaPlayer.PlayerSettings.AdminOnly = toggleValue;
-            mediaPlayer.SaveZDO();
-            rpc.SendData(CinemaPackage.RPCDataType.UpdateZDO, mediaPlayer.PlayerSettings.PlayerType, mediaPlayer.gameObject.transform.position);
+            mediaPlayerComponent.PlayerSettings.AdminOnly = toggleValue;
+            mediaPlayerComponent.SaveZDO();
+            rpc.SendData(CinemaPackage.RPCDataType.UpdateZDO, mediaPlayerComponent.PlayerSettings.PlayerType, mediaPlayerComponent.gameObject.transform.position);
         }
 
         private void OnMasterVolumeChanged(float vol)
         {
-            if (mediaPlayer.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen)
+            if (mediaPlayerComponent.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen)
                 OODConfig.MasterVolumeScreen.Value = vol;
             else
                 OODConfig.MasterVolumeMusicplayer.Value = vol;
@@ -871,73 +871,73 @@ namespace OdinOnDemand.Utils
 
         public void ToggleMainPanel()
         {
-            mediaPlayer.UpdateZDO();
+            mediaPlayerComponent.UpdateZDO();
             CreateMainGUI();
             UpdateLockIcon();
             UpdateLoopIndicator();
 
-            if (mediaPlayer.PlayerSettings.IsPlayingPlaylist)
+            if (mediaPlayerComponent.PlayerSettings.IsPlayingPlaylist)
             {
-                urlInputFieldObj.GetComponent<InputField>().text = mediaPlayer.PlaylistURL;
+                urlInputFieldObj.GetComponent<InputField>().text = mediaPlayerComponent.PlaylistURL;
             }
-            else if (mediaPlayer.UnparsedURL != null)
+            else if (mediaPlayerComponent.UnparsedURL != null)
             {
-                urlInputFieldObj.GetComponent<InputField>().text = mediaPlayer.UnparsedURL;
+                urlInputFieldObj.GetComponent<InputField>().text = mediaPlayerComponent.UnparsedURL;
             }
             
-            mediaPlayer.PlayerSettings.IsGuiActive = !selectionPanelObj.activeSelf;
-            selectionPanelObj.SetActive(mediaPlayer.PlayerSettings.IsGuiActive);
+            mediaPlayerComponent.PlayerSettings.IsGuiActive = !selectionPanelObj.activeSelf;
+            selectionPanelObj.SetActive(mediaPlayerComponent.PlayerSettings.IsGuiActive);
             // Toggle input
-            GUIManager.BlockInput(mediaPlayer.PlayerSettings.IsGuiActive);
+            GUIManager.BlockInput(mediaPlayerComponent.PlayerSettings.IsGuiActive);
         }
 
         private void ToggleShuffle()
         {
-            mediaPlayer.PlayerSettings.IsShuffling = !mediaPlayer.PlayerSettings.IsShuffling;
-            if (mediaPlayer.PlayerSettings.IsShuffling)
+            mediaPlayerComponent.PlayerSettings.IsShuffling = !mediaPlayerComponent.PlayerSettings.IsShuffling;
+            if (mediaPlayerComponent.PlayerSettings.IsShuffling)
             {
                 var rnd = new Random();
-                mediaPlayer.PreShufflePlaylist = mediaPlayer.CurrentPlaylist;
-                mediaPlayer.CurrentPlaylist = mediaPlayer.CurrentPlaylist.OrderBy(x => rnd.Next()).ToList();
-                mediaPlayer.PlaylistPosition = 0;
+                mediaPlayerComponent.PreShufflePlaylist = mediaPlayerComponent.CurrentPlaylist;
+                mediaPlayerComponent.CurrentPlaylist = mediaPlayerComponent.CurrentPlaylist.OrderBy(x => rnd.Next()).ToList();
+                mediaPlayerComponent.PlaylistPosition = 0;
                 if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Shuffled Playlist");
 
                 toggleShuffleObj.GetComponentInChildren<Text>().text = "Y";
             }
             else
             {
-                var pos = mediaPlayer.PreShufflePlaylist.FindIndex(v => v == mediaPlayer.CurrentPlaylist.ElementAt(mediaPlayer.PlaylistPosition));
-                mediaPlayer.PlaylistPosition = pos;
-                mediaPlayer.CurrentPlaylist = mediaPlayer.PreShufflePlaylist;
+                var pos = mediaPlayerComponent.PreShufflePlaylist.FindIndex(v => v == mediaPlayerComponent.CurrentPlaylist.ElementAt(mediaPlayerComponent.PlaylistPosition));
+                mediaPlayerComponent.PlaylistPosition = pos;
+                mediaPlayerComponent.CurrentPlaylist = mediaPlayerComponent.PreShufflePlaylist;
                 toggleShuffleObj.GetComponentInChildren<Text>().text = "N";
-                mediaPlayer.PreShufflePlaylist = null;
+                mediaPlayerComponent.PreShufflePlaylist = null;
             }
         }
 
         public void ToggleLoop()
         {
-            mediaPlayer.PlayerSettings.IsLooping = !mediaPlayer.PlayerSettings.IsLooping;
-            if (!mediaPlayer.PlayerSettings.IsPlayingPlaylist)
+            mediaPlayerComponent.PlayerSettings.IsLooping = !mediaPlayerComponent.PlayerSettings.IsLooping;
+            if (!mediaPlayerComponent.PlayerSettings.IsPlayingPlaylist)
             {
-                mediaPlayer.mAudio.loop = mediaPlayer.PlayerSettings.IsLooping;
-                mediaPlayer.mScreen.isLooping = mediaPlayer.PlayerSettings.IsLooping;
-                rpc.SendData(CinemaPackage.RPCDataType.SetLoop, mediaPlayer.PlayerSettings.PlayerType, mediaPlayer.gameObject.transform.position, "",
-                    CinemaPackage.PlayerStatus.NULL, 1, mediaPlayer.PlayerSettings.IsLooping);
+                mediaPlayerComponent.mAudio.loop = mediaPlayerComponent.PlayerSettings.IsLooping;
+                mediaPlayerComponent.mScreen.isLooping = mediaPlayerComponent.PlayerSettings.IsLooping;
+                rpc.SendData(CinemaPackage.RPCDataType.SetLoop, mediaPlayerComponent.PlayerSettings.PlayerType, mediaPlayerComponent.gameObject.transform.position, "",
+                    CinemaPackage.PlayerStatus.NULL, 1, mediaPlayerComponent.PlayerSettings.IsLooping);
             }
 
-            mediaPlayer.SaveZDO();
+            mediaPlayerComponent.SaveZDO();
             UpdateLoopIndicator();
         }
 
         public void UpdateLoopIndicator()
         {
-            toggleLoopObj.GetComponentInChildren<Text>().text = mediaPlayer.PlayerSettings.IsLooping ? "Y" : "N";
+            toggleLoopObj.GetComponentInChildren<Text>().text = mediaPlayerComponent.PlayerSettings.IsLooping ? "Y" : "N";
         }
 
         public void SetLoop(bool looping)
         {
-            mediaPlayer.mAudio.loop = looping;
-            mediaPlayer.mScreen.isLooping = looping;
+            mediaPlayerComponent.mAudio.loop = looping;
+            mediaPlayerComponent.mScreen.isLooping = looping;
             if (selectionPanelObj)
                 if (selectionPanelObj.activeInHierarchy)
                     toggleLoopObj.GetComponentInChildren<Text>().text = looping ? "Y" : "N";
@@ -945,15 +945,15 @@ namespace OdinOnDemand.Utils
 
         public void ToggleTrackForward()
         {
-            mediaPlayer.PlayerSettings.TrackingForward = !mediaPlayer.PlayerSettings.TrackingForward;
-            mediaPlayer.StartCoroutine(TrackFoward());
+            mediaPlayerComponent.PlayerSettings.TrackingForward = !mediaPlayerComponent.PlayerSettings.TrackingForward;
+            mediaPlayerComponent.StartCoroutine(TrackFoward());
         }
 
         private IEnumerator TrackFoward()
         {
-            while (mediaPlayer.PlayerSettings.TrackingForward)
+            while (mediaPlayerComponent.PlayerSettings.TrackingForward)
             {
-                mediaPlayer.mScreen.StepForward();
+                mediaPlayerComponent.mScreen.StepForward();
                 yield return null;
             }
         }
@@ -962,23 +962,23 @@ namespace OdinOnDemand.Utils
         
         public void OnClickSkipPlaylistTrack()
         {
-            if (mediaPlayer.PlaylistPosition + 1 < mediaPlayer.CurrentPlaylist.Count)
+            if (mediaPlayerComponent.PlaylistPosition + 1 < mediaPlayerComponent.CurrentPlaylist.Count)
             {
-                mediaPlayer.PlaylistPosition++;
+                mediaPlayerComponent.PlaylistPosition++;
                 if (debounceCoroutine != null)
                 {
-                    mediaPlayer.StopCoroutine(debounceCoroutine);
+                    mediaPlayerComponent.StopCoroutine(debounceCoroutine);
                 }
-                debounceCoroutine = mediaPlayer.StartCoroutine(DebounceSkipVideo());
+                debounceCoroutine = mediaPlayerComponent.StartCoroutine(DebounceSkipVideo());
             }
-            else if (mediaPlayer.PlayerSettings.IsLooping)
+            else if (mediaPlayerComponent.PlayerSettings.IsLooping)
             {
-                mediaPlayer.PlaylistPosition = 0;
+                mediaPlayerComponent.PlaylistPosition = 0;
                 if (debounceCoroutine != null)
                 {
-                    mediaPlayer.StopCoroutine(debounceCoroutine);
+                    mediaPlayerComponent.StopCoroutine(debounceCoroutine);
                 }
-                debounceCoroutine = mediaPlayer.StartCoroutine(DebounceSkipVideo());
+                debounceCoroutine = mediaPlayerComponent.StartCoroutine(DebounceSkipVideo());
             }
         }
         
@@ -997,20 +997,20 @@ namespace OdinOnDemand.Utils
         {
             if (isWaiting) return;  // don't play if we're still in the debounce period
             
-            mediaPlayer.SetURL(mediaPlayer.CurrentPlaylist.ElementAt(mediaPlayer.PlaylistPosition).Url);
+            mediaPlayerComponent.SetURL(mediaPlayerComponent.CurrentPlaylist.ElementAt(mediaPlayerComponent.PlaylistPosition).Url);
         }
 
         public void PreviousPlaylistTrack()
         {
-            if (mediaPlayer.PlaylistPosition - 1 >= 0)
+            if (mediaPlayerComponent.PlaylistPosition - 1 >= 0)
             {
-                mediaPlayer.PlaylistPosition--;
-                mediaPlayer.SetURL(mediaPlayer.CurrentPlaylist.ElementAt(mediaPlayer.PlaylistPosition).Url);
+                mediaPlayerComponent.PlaylistPosition--;
+                mediaPlayerComponent.SetURL(mediaPlayerComponent.CurrentPlaylist.ElementAt(mediaPlayerComponent.PlaylistPosition).Url);
             }
-            else if (mediaPlayer.PlayerSettings.IsLooping)
+            else if (mediaPlayerComponent.PlayerSettings.IsLooping)
             {
-                mediaPlayer.PlaylistPosition = mediaPlayer.CurrentPlaylist.Count() - 1;
-                mediaPlayer.SetURL(mediaPlayer.CurrentPlaylist.ElementAt(mediaPlayer.PlaylistPosition).Url);
+                mediaPlayerComponent.PlaylistPosition = mediaPlayerComponent.CurrentPlaylist.Count() - 1;
+                mediaPlayerComponent.SetURL(mediaPlayerComponent.CurrentPlaylist.ElementAt(mediaPlayerComponent.PlaylistPosition).Url);
             }
         }
         

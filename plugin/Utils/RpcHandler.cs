@@ -16,13 +16,13 @@ namespace OdinOnDemand.Utils
 {
     internal class RpcHandler
     {
-        public static List<MediaPlayer> mediaPlayerList;
+        public static List<MediaPlayerComponent> mediaPlayerList;
 
         private static CustomRPC OODRPC;
 
         public void Create()
         {
-            mediaPlayerList = new List<MediaPlayer>();
+            mediaPlayerList = new List<MediaPlayerComponent>();
 
             OODRPC = NetworkManager.Instance.AddRPC("OODRPC", OODRPCServerReceive, OODRPCClientReceive);
             if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Created OODRPC");
