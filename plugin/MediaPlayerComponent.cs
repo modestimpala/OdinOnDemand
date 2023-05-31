@@ -224,7 +224,7 @@ namespace OdinOnDemand
                     loadingCircleObj.SetActive(true);
                 }
                 
-                UIController.loadingIndicatorObj.SetActive(true); //Show the loading indicator in the GUI
+                UIController.SetLoadingIndicatorActive(true); //Show the loading indicator in the GUI
                 
                 var loadingMessageIndex = PlayerSettings.LoadingCount % 4; // Cycle through the loading messages
                 UIController.loadingIndicatorObj.GetComponent<Text>().text = UIController.loadingMessages[loadingMessageIndex];
@@ -232,7 +232,7 @@ namespace OdinOnDemand
             }
             else if (!urlGrab.LoadingBool && UIController.loadingIndicatorObj && UIController.loadingIndicatorObj.activeSelf)
             {
-                UIController.loadingIndicatorObj.SetActive(false);
+                UIController.SetLoadingIndicatorActive(false);
             }
         }
 
@@ -642,8 +642,8 @@ namespace OdinOnDemand
         {
             downloadURL = null;
 
-            UIController.loadingIndicatorObj.GetComponent<Text>().text = "Processing";
-            UIController.loadingIndicatorObj.SetActive(true);
+            UIController.SetLoadingIndicatorText("Processing");
+            UIController.SetLoadingIndicatorActive(true);
             //Jotunn.Logger.LogDebug("playing soundcloud");
             downloadURL = await urlGrab.GetSoundcloudExplode(sentUrl);
             if (downloadURL != null)
