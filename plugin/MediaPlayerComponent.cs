@@ -475,31 +475,22 @@ namespace OdinOnDemand
             urlGrab.Reset();
         }
 
-        public void SetURL(string url) //Set the video URL, with optional RPC and play on set
+        public void SetURL(string url) //Set the mediaplayer url
         {
             UnparsedURL = url; //Save the unparsed url for later use
             mAudio.clip = null;
+            
             // Just send RPC. It will be sent back to us and we'll handle it there.
-            if (UnparsedURL != null)
+            if (UnparsedURL != null && (mScreen != null || mAudio != null))
             {
-                if (url.Contains("soundcloud") && PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.Radio)
+                if (url.Contains("youtube.com/watch?v=") || url.Contains("youtube.com/shorts/") ||
+                    url.Contains("youtu.be") || url.Contains("youtube.com/playlist"))
                 {
-                    rpc.SendData(CinemaPackage.RPCDataType.SetAudioUrl, PlayerSettings.PlayerType, gameObject.transform.position, UnparsedURL);
-                }
-                
-                if (mScreen != null || mAudio != null)
-                {
-                    if (url.Contains("youtube.com/watch?v=") || url.Contains("youtube.com/shorts/") ||
-                        url.Contains("youtu.be") || url.Contains("youtube.com/playlist"))
+                    UIController.UpdatePlaylistInfo();
+                    if (url.Contains("?list=") || url.Contains("&list="))
                     {
-                        UIController.UpdatePlaylistInfo();
-                        if (url.Contains("?list=") || url.Contains("&list="))
-                        {
-                            SetPlaylist(UnparsedURL);
-                            return;
-                        }
-                        
-                        rpc.SendData(CinemaPackage.RPCDataType.SetVideoUrl, PlayerSettings.PlayerType, gameObject.transform.position, UnparsedURL);
+                        SetPlaylist(UnparsedURL);
+                        return;
                     }
                 }
                 rpc.SendData(CinemaPackage.RPCDataType.SetVideoUrl, PlayerSettings.PlayerType, gameObject.transform.position, UnparsedURL);
