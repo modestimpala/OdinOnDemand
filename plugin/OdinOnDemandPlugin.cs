@@ -94,74 +94,26 @@ namespace OdinOnDemand
         {
             // Load recipes from JSON file
             var file = Paths.ConfigPath + "/com.ood.valmedia.recipes.json";
-            if (File.Exists(file))
-                try
-                {
-                    var recipesFromFile = File.ReadAllText(file);
-                    //Check to make sure it has all the new recipes. there is a better way to do this? Versioning? maybe don't force update?
-                    var oldRecipeBool = !recipesFromFile.Contains("receiver") || !recipesFromFile.Contains("theater") ||
-                                        !recipesFromFile.Contains("speaker");
-                    if (IsValidJson(recipesFromFile) && !oldRecipeBool) 
-                    {
-                        LoadRecipes(PieceConfig.ListFromJson(recipesFromFile));
-                    }
-                    else //if it's not valid json or doesn't have the new recipes, load the default recipes
-                    {
-                        string defaultRecip = "";
-                        using (Stream stream = typeof(OdinOnDemandPlugin).Assembly.GetManifestResourceStream("OdinOnDemand.Assets.default.json"))
-                        {
-                            if (stream != null)
-                                using (var reader = new StreamReader(stream))
-                                {
-                                    defaultRecip = reader.ReadToEnd();
-                                }
-                        }
+            if (!File.Exists(file))
+            {
+                LoadDefaultRecipes(true);
+                Jotunn.Logger.LogDebug(
+                    "Did not find default json, loading and writing default recipes to com.ood.valmedia.recipes.json");
+                return;
+            }
+            var recipesFromFile = File.ReadAllText(file);
+            //Check to make sure it has all the new recipes. there is a better way to do this? Versioning? maybe don't force update?
+            var oldRecipeBool = !recipesFromFile.Contains("receiver") || !recipesFromFile.Contains("theater") ||
+                                !recipesFromFile.Contains("speaker");
+            if (!IsValidJson(recipesFromFile) || oldRecipeBool) 
+            {
+                LoadDefaultRecipes();
+                Jotunn.Logger.LogWarning(
+                    "JSON in com.ood.valmedia.recipes.json is invalid or outdated. Setting to default recipes. Try deleting your recipe file.");
+                return;
+            }
+            LoadRecipes(PieceConfig.ListFromJson(recipesFromFile));
 
-                        if (defaultRecip != "")
-                        {
-                            LoadRecipes(PieceConfig.ListFromJson(defaultRecip));
-                        }
-                        else
-                        {
-                            Jotunn.Logger.LogError("FATAL Failed to load default recipes.");
-                        }
-                        Jotunn.Logger.LogWarning(
-                            "JSON in com.ood.valmedia.recipes.json is invalid or outdated. Setting to default recipes. Try deleting your recipe file.");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Jotunn.Logger.LogDebug(ex);
-                }
-            else // if the file doesn't exist, load the default recipes
-                try
-                {
-                    var writer = File.CreateText(file);
-                    string defaultRecip = "";
-                    using (Stream stream = typeof(OdinOnDemandPlugin).Assembly.GetManifestResourceStream("OdinOnDemand.Assets.default.json"))
-                    {
-                        if (stream != null)
-                            using (var reader = new StreamReader(stream))
-                            {
-                                defaultRecip = reader.ReadToEnd();
-                            }
-                    }
-                    if (defaultRecip != "")
-                    {
-                        writer.Write(defaultRecip);
-                        LoadRecipes(PieceConfig.ListFromJson(defaultRecip));
-                    }
-                    else
-                    {
-                        Jotunn.Logger.LogError("FATAL Failed to load default recipes.");
-                    }
-                    writer.Close();
-                }
-                catch (Exception ex)
-                {
-                    Jotunn.Logger.LogDebug(ex);
-                }
-            
             // Remote config
             //TODO: Item json recipes
             var remoteConfig = new ItemConfig
@@ -179,8 +131,45 @@ namespace OdinOnDemand
             var preloadAsset = PrefabManager.Instance.GetPrefab("remote");
             preloadAsset.transform.Find("attach").gameObject.AddComponent<RemoteControlItem>();
         }
-        
-        
+
+        private void LoadDefaultRecipes(bool writeToFile = false)
+        {
+            try
+            {
+                var file = Paths.ConfigPath + "/com.ood.valmedia.recipes.json";
+                var writer = File.CreateText(file);
+                var defaultRecip = RecipFromManifest();
+                if (defaultRecip != "")
+                {
+                    LoadRecipes(PieceConfig.ListFromJson(defaultRecip));
+                }
+                else
+                {
+                    Jotunn.Logger.LogError("FATAL Failed to load default recipes.");
+                }
+            } catch (Exception ex)
+            {
+                Jotunn.Logger.LogDebug(ex);
+            }
+        }
+
+        private static string RecipFromManifest()
+        {
+            string defaultRecip = "";
+            using (Stream stream =
+                   typeof(OdinOnDemandPlugin).Assembly.GetManifestResourceStream("OdinOnDemand.Assets.default.json"))
+            {
+                if (stream != null)
+                    using (var reader = new StreamReader(stream))
+                    {
+                        defaultRecip = reader.ReadToEnd();
+                    }
+            }
+
+            return defaultRecip;
+        }
+
+
         private void LoadRecipes(List<PieceConfig> pieceConfigs)  //Loads recipes from the json file after it's parsed to a list
         {
             pieceConfigs.ForEach(c =>
