@@ -266,6 +266,10 @@ namespace OdinOnDemand
                     UIController.UpdatePlaylistUI();
                 }
             }
+            
+            if (!mAudio.isPlaying && mAudio.time == 0f && !mAudio.loop) { //If the audio is not playing, and the time is 0, and it's not looping, then we're not playing anything
+                if (animator != null) animator.SetBool(PlayerSettings.Playing, false);
+            }
         }
 
         private void SetupScreen() //Setup the screen, called on awake
