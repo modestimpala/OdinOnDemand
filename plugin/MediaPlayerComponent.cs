@@ -506,8 +506,14 @@ namespace OdinOnDemand
             if (PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.Radio)
             {
                 //check if url is audio file
-                if (url.Contains(".mp3") || url.Contains(".wav") || url.Contains(".ogg") || url.Contains(".flac") || url.Contains(".m4a") || url.Contains(".aac"))
-                {
+                if (IsAudioFile(url))
+                {   
+                    var relativeURL = GetRelativeURL(url);
+                
+                    if (relativeURL != "")
+                    {
+                        url = relativeURL;
+                    }
                     PlayerSettings.playerLinkType = PlayerSettings.LinkType.Direct;
                     downloadURL = urlGrab.CleanUrl(url);
                     StartCoroutine(AudioWebRequest());
@@ -525,16 +531,8 @@ namespace OdinOnDemand
             if (url.Contains("\\") || url.Contains(".") || url.Contains("/"))
             {
                 //Relative paths for local files
-                var relativeURL = "";
-                if (url.Contains("local:\\\\"))
-                {
-                    relativeURL =  Path.Combine(Paths.PluginPath, url).Replace("local:\\\\", "");;
-                            
-                } else if (url.Contains("local://"))
-                {
-                    relativeURL =  Path.Combine(Paths.PluginPath, url).Replace("local://", "");;
-                            
-                }
+                var relativeURL = GetRelativeURL(url);
+                
                 if (relativeURL != "")
                 {
                     mScreen.url = relativeURL;
@@ -574,6 +572,27 @@ namespace OdinOnDemand
             {
                 mScreen.Pause();
             }
+        }
+        
+        private bool IsAudioFile(string url)
+        {
+            return url.Contains(".mp3") || url.Contains(".wav") || url.Contains(".ogg") || url.Contains(".flac") || url.Contains(".m4a") || url.Contains(".aac");
+        }
+
+        private string GetRelativeURL(string url)
+        {
+            string relativeURL = "";
+
+            if (url.Contains("local:\\\\"))
+            {
+                relativeURL = Path.Combine(Paths.PluginPath, url).Replace("local:\\\\", "");
+            }
+            else if (url.Contains("local://"))
+            {
+                relativeURL = Path.Combine(Paths.PluginPath, url).Replace("local://", "");
+            }
+
+            return relativeURL;
         }
 
         private async void SetPlaylist(string url) // Set playlist from url
