@@ -575,7 +575,7 @@ namespace OdinOnDemand
         
         private bool IsAudioFile(string url)
         {
-            return url.Contains(".mp3") || url.Contains(".wav") || url.Contains(".ogg") || url.Contains(".flac") || url.Contains(".m4a") || url.Contains(".aac");
+            return url.Contains(".mp3") || url.Contains(".wav") || url.Contains(".ogg") || url.Contains(".flac") || url.Contains(".m4a") || url.Contains(".aac") || url.Contains(".aif");
         }
 
         private string GetRelativeURL(string url)
@@ -1014,7 +1014,7 @@ namespace OdinOnDemand
         {
             if (zdo.IsOwner())
                 return;
-            zdo.SetOwner(ZDOMan.instance.GetMyID());
+            zdo.SetOwner(ZDOMan.GetSessionID());
         }
 
     }
