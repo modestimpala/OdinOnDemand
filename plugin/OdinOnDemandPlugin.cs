@@ -110,9 +110,11 @@ namespace OdinOnDemand
                 LoadDefaultRecipes();
                 Jotunn.Logger.LogWarning(
                     "JSON in com.ood.valmedia.recipes.json is invalid or outdated. Setting to default recipes. Try deleting your recipe file.");
-                return;
             }
-            LoadRecipes(PieceConfig.ListFromJson(recipesFromFile));
+            else
+            {
+                LoadRecipes(PieceConfig.ListFromJson(recipesFromFile));
+            }
 
             // Remote config
             //TODO: Item json recipes
