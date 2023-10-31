@@ -1,30 +1,28 @@
-﻿using System;
-using System.Threading.Tasks;
-using OdinOnDemand.Utils;
-using UnityEngine;
+﻿using UnityEngine;
 
-namespace OdinOnDemand
+namespace OdinOnDemand.Components
 {
-    public class SpeakerComponent : MonoBehaviour, Hoverable, Interactable
+    public class ReceiverComponent : MonoBehaviour, Hoverable, Interactable
     {
         public Piece mPiece { get; set; }
         public string mName;
 
+        private ZNetView zNetView;
         private void Awake()
         {
             mPiece = gameObject.GetComponentInChildren<Piece>();
             mName = mPiece.m_name;
+            zNetView = GetComponent<ZNetView>();
+        }
+        
+        public string GetHoverText()
+        {
+            return Localization.instance.Localize(string.Concat(mName));
         }
 
         public string GetHoverName()
         {
             return mName;
-        }
-
-        public string GetHoverText()
-        {
-            return Localization.instance.Localize(string.Concat(mName));
-            
         }
 
         public bool Interact(Humanoid user, bool hold, bool alt)
@@ -36,6 +34,5 @@ namespace OdinOnDemand
         {
             return false;
         }
-
     }
 }

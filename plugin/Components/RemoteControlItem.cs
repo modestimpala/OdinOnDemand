@@ -1,10 +1,7 @@
-﻿using System.Collections.Generic;
-using Jotunn.Managers;
-using OdinOnDemand.Utils;
+﻿using OdinOnDemand.Utils;
 using UnityEngine;
-using Logger = Jotunn.Logger;
 
-namespace OdinOnDemand
+namespace OdinOnDemand.Components
 {
     internal class RemoteControlItem : MonoBehaviour
     {
