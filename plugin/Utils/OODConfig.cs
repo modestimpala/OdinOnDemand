@@ -1,7 +1,8 @@
 ﻿using BepInEx.Configuration;
-using Jotunn;
 using Jotunn.Managers;
 using Jotunn.Utils;
+using UnityEngine;
+using Logger = Jotunn.Logger;
 
 namespace OdinOnDemand.Utils
 {
@@ -31,8 +32,10 @@ namespace OdinOnDemand.Utils
         public static ConfigEntry<int> YouTubeExplodeTimeout { get; private set; } 
         public static ConfigEntry<int> SoundCloudExplodeTimeout { get; private set; }
         private static ConfigEntryBase ChangedSetting { get; set; }
-
         public static ConfigEntry<YouTubeAPI> YoutubeAPI { get; private set; }
+        public static ConfigEntry<bool> VipMode { get; private set; }
+        public static ConfigEntry<string> VipList { get; private set; }
+        public static ConfigEntry<string> VipMessage { get; private set; }
         private static bool IsConfigChanged { get; set; }
 
         public static void Bind(ConfigFile config)
@@ -117,6 +120,17 @@ namespace OdinOnDemand.Utils
 
             SoundCloudExplodeTimeout = config.Bind("OdinOnDemand", "SoundCloudExplode Timeout", 6000,
                 new ConfigDescription("Custom timeout for SoundCloudExplode tasks", null,
+                    new ConfigurationManagerAttributes { IsAdminOnly = true }));
+            
+            VipMode = config.Bind("OdinOnDemand", "VIP Mode", false,
+                new ConfigDescription("When enabled, Only VIPs can place, remove, and interact with OdinOnDemand Pieces (admins excluded) WARNING: BETA. Use at own discretion. Please report any issues on Github/Nexus.", null,
+                    new ConfigurationManagerAttributes { IsAdminOnly = true }));
+            
+            VipList = config.Bind("OdinOnDemand", "VIP List", ",",
+                new ConfigDescription("SteamID List Seperated by commas", null,
+                    new ConfigurationManagerAttributes { IsAdminOnly = true }));
+            VipMessage = config.Bind("OdinOnDemand", "VIP Message", "You are not allowed to perform this action.",
+                new ConfigDescription("The message displayed when a non-VIP attempts to access a VIP-only piece.", null,
                     new ConfigurationManagerAttributes { IsAdminOnly = true }));
             /*
             assetsToLoad = config.Bind("OdinOnDemand", "Assets", "",
