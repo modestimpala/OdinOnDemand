@@ -25,7 +25,7 @@ namespace OdinOnDemand
     {
         public const string PluginGUID = "com.ood.valmedia";
         public const string PluginName = "OdinOnDemand";
-        public const string PluginVersion = "0.9.89";
+        public const string PluginVersion = "0.9.90";
 
         private static readonly CustomLocalization Localization = LocalizationManager.Instance.GetLocalization();
         public static readonly RpcHandler RPCHandlers = new RpcHandler();
