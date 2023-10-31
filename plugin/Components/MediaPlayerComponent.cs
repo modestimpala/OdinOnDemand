@@ -13,7 +13,7 @@ using UnityEngine.UI;
 using UnityEngine.Video;
 using Logger = Jotunn.Logger;
 
-namespace OdinOnDemand
+namespace OdinOnDemand.Components
 {
     public class MediaPlayerComponent : MonoBehaviour, Hoverable, Interactable
     {
