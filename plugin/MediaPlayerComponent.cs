@@ -979,6 +979,14 @@ namespace OdinOnDemand
         {
             if (PlayerSettings.AdminOnly && !SynchronizationManager.Instance.PlayerIsAdmin) return "";
             //TODO: control volume with no access
+            if (OODConfig.VipMode.Value)
+            {
+                var rank = RankSystem.GetRank(Steamworks.SteamUser.GetSteamID().ToString());
+                if (rank != RankSystem.PlayerRank.Admin && rank != RankSystem.PlayerRank.Vip)
+                {
+                    return Localization.instance.Localize(mName + "\n$piece_noaccess");
+                }
+            }
             if (!PrivateArea.CheckAccess(transform.position, 0f, false) && PlayerSettings.IsLocked)
                 return Localization.instance.Localize(mName + "\n$piece_noaccess");
             if (PlayerSettings.IsLinkedToParent)
@@ -990,9 +998,17 @@ namespace OdinOnDemand
 
         public bool Interact(Humanoid user, bool hold, bool alt) //Open screen UI
         {
+            if (OODConfig.VipMode.Value)
+            {
+                var rank = RankSystem.GetRank(Steamworks.SteamUser.GetSteamID().ToString());
+                if (rank != RankSystem.PlayerRank.Admin && rank != RankSystem.PlayerRank.Vip)
+                {
+                    return false;
+                }
+            }
+            
             if ((!PrivateArea.CheckAccess(transform.position) && PlayerSettings.IsLocked) ||
                 (PlayerSettings.AdminOnly && !SynchronizationManager.Instance.PlayerIsAdmin)) return false;
-
 
             UIController.ToggleMainPanel();
 

@@ -32,6 +32,8 @@ namespace OdinOnDemand
         public static Material MainScreenMat;
         public static Dictionary<string, Sprite> UISprites;
         private AssetBundle _valMediaAssets;
+        
+        private static Harmony _harmony;
 
         private void Awake()
         {
@@ -52,6 +54,11 @@ namespace OdinOnDemand
             
             //load assets and configure pieces and items
             LoadAssets();
+            
+            //setup harmony patches
+            _harmony = new Harmony("Harmony.ValMedia.OOD");
+            _harmony.PatchAll();
+            
             Jotunn.Logger.LogDebug("** OdinOnDemand Initialised **");
         }
 
