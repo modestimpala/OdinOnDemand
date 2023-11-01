@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
@@ -35,11 +36,13 @@ namespace OdinOnDemand
         private AssetBundle _valMediaAssets;
         
         private static Harmony _harmony;
+        private static string _configFile;
 
         private void Awake()
         {
             //setup config
             OODConfig.Bind(Config);
+            _configFile = Paths.ConfigPath + "/com.ood.valmedia.recipes.json";
             OODConfig.SyncManager();
             
             //Key Config
@@ -100,42 +103,98 @@ namespace OdinOnDemand
         
         private void AddRecipes()
         {
-            // Load recipes from JSON file
-            var file = Paths.ConfigPath + "/com.ood.valmedia.recipes.json";
-            if (!File.Exists(file))
+            AddRemoteRecipe(); //Remote recipe
+
+            //Piece recipes
+            if (!File.Exists(_configFile))
             {
                 LoadDefaultRecipes(true);
                 Jotunn.Logger.LogDebug(
-                    "Did not find default json, loading and writing default recipes to com.ood.valmedia.recipes.json");
+                    "Did not find recipe json, loading and writing default recipes to: " + Paths.ConfigPath + "/com.ood.valmedia.recipes.json");
                 return;
             }
-            var recipesFromFile = File.ReadAllText(file);
-            //Check to make sure it has all the new recipes. there is a better way to do this? Versioning? maybe don't force update?
-            var oldRecipeBool = !recipesFromFile.Contains("receiver") || !recipesFromFile.Contains("theater") ||
-                                !recipesFromFile.Contains("speaker");
-            if (!IsValidJson(recipesFromFile) || oldRecipeBool) 
+            
+            var recipeStringFromFile = File.ReadAllText(_configFile);
+            
+            if (!IsValidJson(recipeStringFromFile))
             {
                 LoadDefaultRecipes();
                 Jotunn.Logger.LogWarning(
-                    "JSON in com.ood.valmedia.recipes.json is invalid or outdated. Setting to default recipes. Try deleting your recipe file.");
+                    "JSON in com.ood.valmedia.recipes.json is invalid. Setting to default recipes. " +
+                    "If you wish to edit recipes please use a JSON validator or delete your recipe file and restart the game for a new default file.");
+                return;
+            }
+            
+            //check if old recipe file, if so update to new recipes
+            var oldRecipeBool = !recipeStringFromFile.Contains("receiver") || !recipeStringFromFile.Contains("theater") ||
+                                !recipeStringFromFile.Contains("speaker");
+            if (oldRecipeBool && OODConfig.AutoUpdateRecipes.Value) 
+            {
+                Jotunn.Logger.LogDebug("Old recipe file detected. Updating to new recipes.");
+                List<PieceConfig> oldRecipes = PieceConfig.ListFromJson(recipeStringFromFile);
+                var newRecipes = RecipFromManifest();
+                
+                UpdateRecipeFile(newRecipes, oldRecipes, _configFile);
             }
             else
             {
-                LoadRecipes(PieceConfig.ListFromJson(recipesFromFile));
+                if(!OODConfig.AutoUpdateRecipes.Value) Jotunn.Logger.LogWarning("Auto recipe update disabled. Skipping recipe update.");
+                LoadRecipes(PieceConfig.ListFromJson(recipeStringFromFile));
             }
+        }
 
+        private void UpdateRecipeFile(string newRecipes, List<PieceConfig> oldRecipes, string file)
+        {
+            if (newRecipes != "")
+            {
+                var newRecipeList = PieceConfig.ListFromJson(newRecipes);
+                MergeRecipes(oldRecipes, newRecipeList);
+
+                LoadRecipes(oldRecipes);
+                try
+                {
+                    var dtoList = Utils.PieceConfigDTO.ToDTOList(oldRecipes);
+                    string json = JsonConvert.SerializeObject(dtoList, Formatting.Indented);
+                    File.WriteAllText(file, json);
+                }
+                catch (Exception e)
+                {
+                    Jotunn.Logger.LogError("Failed to write new recipes to file. Check log for details.");
+                    Jotunn.Logger.LogDebug(e);
+                }
+            }
+            else
+            {
+                Jotunn.Logger.LogError("FATAL Failed to load default recipes.");
+            }
+        }
+
+
+        private static void MergeRecipes(List<PieceConfig> mergeRecipe, List<PieceConfig> recipesToMerge)
+        {
+            foreach (var newRecipe in recipesToMerge)
+            {
+                if (!mergeRecipe.Any(r => r.Name == newRecipe.Name))
+                {
+                    mergeRecipe.Add(newRecipe);
+                }
+            }
+        }
+
+        private void AddRemoteRecipe()
+        {
             // Remote config
             //TODO: Item json recipes
             var remoteConfig = new ItemConfig
             {
                 Amount = 1
             };
-            
+
             remoteConfig.AddRequirement(new RequirementConfig("Bronze", 1));
             var tex = _valMediaAssets.LoadAsset<Texture2D>("assets/MOD ICONS/remoteicon.png");
             var mySprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), Vector2.zero);
             remoteConfig.Icons.AddItem(mySprite);
-            
+
             var remoteItem = new CustomItem(_valMediaAssets, "remote", false, remoteConfig);
             ItemManager.Instance.AddItem(remoteItem);
             var preloadAsset = PrefabManager.Instance.GetPrefab("remote");
@@ -147,7 +206,6 @@ namespace OdinOnDemand
             try
             {
                 var file = Paths.ConfigPath + "/com.ood.valmedia.recipes.json";
-                var writer = File.CreateText(file);
                 var defaultRecip = RecipFromManifest();
                 if (defaultRecip != "")
                 {
@@ -157,25 +215,32 @@ namespace OdinOnDemand
                 {
                     Jotunn.Logger.LogError("FATAL Failed to load default recipes.");
                 }
+
+                if (writeToFile)
+                {
+                    var writer = File.CreateText(file);
+                    writer.Write(defaultRecip);
+                    writer.Close();
+                    writer.Dispose();
+                }
             } catch (Exception ex)
             {
+                Jotunn.Logger.LogError("Exception when handling default recipe file. Check log for details.");
                 Jotunn.Logger.LogDebug(ex);
             }
         }
 
         private static string RecipFromManifest()
         {
-            string defaultRecip = "";
-            using (Stream stream =
-                   typeof(OdinOnDemandPlugin).Assembly.GetManifestResourceStream("OdinOnDemand.Assets.default.json"))
+            var defaultRecip = "";
+            using var stream =
+                typeof(OdinOnDemandPlugin).Assembly.GetManifestResourceStream("OdinOnDemand.Assets.default.json");
+            if (stream != null)
             {
-                if (stream != null)
-                    using (var reader = new StreamReader(stream))
-                    {
-                        defaultRecip = reader.ReadToEnd();
-                    }
+                using var reader = new StreamReader(stream);
+                defaultRecip = reader.ReadToEnd();
             }
-
+            stream?.Dispose();
             return defaultRecip;
         }
 
