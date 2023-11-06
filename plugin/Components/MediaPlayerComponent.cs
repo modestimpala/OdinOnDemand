@@ -412,13 +412,13 @@ namespace OdinOnDemand.Components
             }
             
             // If link type is youtube or relative video, play just the screen
-            if (PlayerSettings.playerLinkType == PlayerSettings.LinkType.Youtube || PlayerSettings.playerLinkType == PlayerSettings.LinkType.RelativeVideo)
+            if (PlayerSettings.playerLinkType == PlayerSettings.LinkType.Youtube || PlayerSettings.playerLinkType == PlayerSettings.LinkType.RelativeVideo || PlayerSettings.playerLinkType == PlayerSettings.LinkType.Video)
             {
                 mScreen.Play();
                 if (animator) animator.SetBool(PlayerSettings.Playing, true);
                 //m_audio.Play();
             }
-            else //If not youtube, play both screen and audio to handle mp3 and such
+            else if(PlayerSettings.playerLinkType == PlayerSettings.LinkType.Audio)
             {
                 if (animator) animator.SetBool(PlayerSettings.Playing, true);
                 if (PlayerSettings.IsPaused)
@@ -430,7 +430,7 @@ namespace OdinOnDemand.Components
                 {
                     mAudio.Play();
                 }
-            }
+            } 
             
             //We are no longer tracking forward if we're playing
             PlayerSettings.TrackingForward = false;
@@ -516,7 +516,7 @@ namespace OdinOnDemand.Components
                     }
                     else
                     {
-                        PlayerSettings.playerLinkType = PlayerSettings.LinkType.Direct;
+                        PlayerSettings.playerLinkType = PlayerSettings.LinkType.Audio;
                     }
                     
                     downloadURL = urlGrab.CleanUrl(url);
@@ -555,7 +555,7 @@ namespace OdinOnDemand.Components
                 }
                 else
                 {
-                    PlayerSettings.playerLinkType = PlayerSettings.LinkType.Direct;
+                    PlayerSettings.playerLinkType = PlayerSettings.LinkType.Video;
                     mScreen.url = url;
                     if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + url);
                 }
