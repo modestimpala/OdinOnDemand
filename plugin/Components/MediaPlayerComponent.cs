@@ -411,8 +411,8 @@ namespace OdinOnDemand.Components
                 screenPlaneObj.SetActive(true);
             }
             
-            // If link type is youtube, play just the screen
-            if (PlayerSettings.playerLinkType == PlayerSettings.LinkType.Youtube)
+            // If link type is youtube or relative video, play just the screen
+            if (PlayerSettings.playerLinkType == PlayerSettings.LinkType.Youtube || PlayerSettings.playerLinkType == PlayerSettings.LinkType.RelativeVideo)
             {
                 mScreen.Play();
                 if (animator) animator.SetBool(PlayerSettings.Playing, true);
@@ -512,8 +512,13 @@ namespace OdinOnDemand.Components
                     if (relativeURL != "")
                     {
                         url = relativeURL;
+                        PlayerSettings.playerLinkType = PlayerSettings.LinkType.RelativeAudio;
                     }
-                    PlayerSettings.playerLinkType = PlayerSettings.LinkType.Direct;
+                    else
+                    {
+                        PlayerSettings.playerLinkType = PlayerSettings.LinkType.Direct;
+                    }
+                    
                     downloadURL = urlGrab.CleanUrl(url);
                     StartCoroutine(AudioWebRequest());
                     return;
@@ -535,11 +540,9 @@ namespace OdinOnDemand.Components
                 if (relativeURL != "")
                 {
                     mScreen.url = relativeURL;
-                    PlayerSettings.playerLinkType = PlayerSettings.LinkType.Direct;
+                    PlayerSettings.playerLinkType = PlayerSettings.LinkType.RelativeVideo;
                     if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + relativeURL);
-                }
-                
-                if (url.Contains("youtube.com/watch?v=") || url.Contains("youtube.com/shorts/") ||
+                } else if (url.Contains("youtube.com/watch?v=") || url.Contains("youtube.com/shorts/") ||
                     url.Contains("youtu.be") && OODConfig.IsYtEnabled.Value)
                 {
                     if (PlayerSettings.IsLooping && (!mScreen.isLooping || !mAudio.loop))
@@ -591,7 +594,12 @@ namespace OdinOnDemand.Components
                 relativeURL = Path.Combine(Paths.PluginPath, url).Replace("local://", "");
             }
 
-            return relativeURL;
+            if (File.Exists(relativeURL))
+            {
+                return relativeURL;
+            }
+
+            return "";
         }
 
         private async void SetPlaylist(string url) // Set playlist from url
