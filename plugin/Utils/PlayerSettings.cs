@@ -51,7 +51,8 @@ namespace OdinOnDemand.Utils
         {
             Youtube,
             Soundcloud,
-            Direct,
+            Video,
+            Audio,
             RelativeAudio,
             RelativeVideo,
         }
