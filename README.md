@@ -7,8 +7,6 @@ OdinOnDemand (OOD) adds several forms of multimedia to Valheim that allow player
 
 ValMedia recommends playing without bloom while watching for the best viewing experience. 
 
-### Due to Valheim's recent upgrade to Unity version 2020.3.45, you may experience crashes during video playback because of a new [VideoPlayer bug](https://forum.unity.com/threads/crash-windowsvideotextureoutput-releasedrawnsamples-bool.1396480/). This may be related to MP4 files. We recommend utilizing VP8 codec videos (webm) or MP3/SoundCloud options as a temporary measure. If a fix is discovered an update will be pushed out, otherwise we're waiting for another Unity update. Apologies for any inconvenience. - ValMedia
-
 0.9.85 introduces new assets, relative path lookup from plugin dir (local://) and more. Check out the updated documentation below.
 
 [<img alt="Preview Video" width="256px" src="https://i.imgur.com/0BaY28I.jpg" />](https://www.youtube.com/watch?v=hePW1dueKjE)
@@ -106,8 +104,6 @@ Avoid changing item names. If you have any issues keep in mind you can delete yo
 The remote control recipe can't be tweaked yet, you can always use a mod like WackysDB for the time being.
 
 ## Known Issues
-
-- Unity crashes, see above notice.
 
 - Boomboxes are currently difficult to place. Just.. keep trying. They place easier on terrain it seems. I'm not quite sure why this is happening. Gramophones are not affected. 
 
