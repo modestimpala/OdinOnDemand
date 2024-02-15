@@ -45,13 +45,18 @@
         <Prefer32Bit>false</Prefer32Bit>
     </PropertyGroup>
     <ItemGroup>
-        <Compile Include="MediaPlayerComponent.cs" />
-        <Compile Include="ReceiverComponent.cs" />
-        <Compile Include="RemoteControlItem.cs" />
-        <Compile Include="SpeakerComponent.cs" />
+        <Compile Include="Components\MediaPlayerComponent.cs" />
+        <Compile Include="Components\ReceiverComponent.cs" />
+        <Compile Include="Components\RemoteControlItem.cs" />
+        <Compile Include="Components\SpeakerComponent.cs" />
+        <Compile Include="Patches\PlacePiecePatch.cs" />
+        <Compile Include="Patches\RemovePiecePatch.cs" />
+        <Compile Include="Utils\AudioFader.cs" />
         <Compile Include="Utils\KeyConfig.cs" />
         <Compile Include="Utils\LoadingCircle.cs" />
+        <Compile Include="Utils\PieceConfigDTO.cs" />
         <Compile Include="Utils\PlayerSettings.cs" />
+        <Compile Include="Utils\RankSystem.cs" />
         <Compile Include="Utils\ScrollingText.cs" />
         <Compile Include="Utils\UIController.cs" />
         <Compile Include="Utils\UrlGrab.cs" />
