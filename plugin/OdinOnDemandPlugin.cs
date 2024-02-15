@@ -69,17 +69,8 @@ namespace OdinOnDemand
         private void LoadAssets()
         {
             // Load asset bundle from the filesystem, setup sprite textures
-            if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Vulkan)
-            {
-                _valMediaAssets = AssetUtils.LoadAssetBundleFromResources("videoplayers", typeof(OdinOnDemandPlugin).Assembly);
-                Jotunn.Logger.LogDebug("Loading OdinOnDemand Assets");
-            }
-            else
-            {
-                _valMediaAssets =
-                    AssetUtils.LoadAssetBundleFromResources("videoplayersvulkan", typeof(OdinOnDemandPlugin).Assembly);
-                Jotunn.Logger.LogDebug("Loading Vulkan OdinOnDemand Assets");
-            }
+            _valMediaAssets = AssetUtils.LoadAssetBundleFromResources("videoplayers", typeof(OdinOnDemandPlugin).Assembly);
+            Jotunn.Logger.LogDebug("Loading OdinOnDemand Assets");
             // read / setup piece recipes
             AddRecipes();
 
