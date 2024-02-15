@@ -32,19 +32,22 @@ namespace OdinOnDemand.Components
         //Gramophone animator
         private Animator animator;
         
-        public string UnparsedURL { get; private set; }
+        //Trigger collider
+        private SphereCollider triggerCollider;
         
         //Utils
         private RpcHandler rpc;
         private URLGrab urlGrab;
         
+        public string UnparsedURL { get; private set; }
         // URIs
         private Uri downloadURL;
         private Uri youtubeSoundDirectUri;
         private Uri youtubeVideoDirectUri;
         
         private string youtubeURLNode;
-        
+        private static AudioFader _audioFaderComp;
+
         public MediaPlayerComponent()
         {
             UIController = new UIController(this);
@@ -119,17 +122,30 @@ namespace OdinOnDemand.Components
                     zdo.Set("hasData", true);
                 }
             }
+            
+            // Audio fader
+            if (OODConfig.AudioFadeType.Value != OODConfig.FadeType.None)
+            {
+                if (AudioFader.Instance == null && GameObject.Find("OODAudioFader") == null)
+                {
+                    var audioFader = new GameObject("OODAudioFader");
+                    _audioFaderComp = audioFader.AddComponent<AudioFader>();
+                    DontDestroyOnLoad(audioFader);
+                }
+            }
+            
         }
         
         public void Start()
         {
             RpcHandler.mediaPlayerList.Add(this); // Add this player to the list of players for networking
 
-            if (OODConfig.ScreenDisableOutOfRange.Value) // if the screen is set to disable when out of range, add a collider so we can handle that
+            // add trigger collider if we need it for screen disable or audio fade type is toggle
+            if (OODConfig.ScreenDisableOutOfRange.Value) 
             {
-                var collider = gameObject.AddComponent<SphereCollider>();
-                collider.isTrigger = true;
-                collider.radius = OODConfig.DefaultDistance.Value;
+                triggerCollider = gameObject.AddComponent<SphereCollider>();
+                triggerCollider.isTrigger = true;
+                triggerCollider.radius = OODConfig.DefaultDistance.Value;
             }
         }
         
@@ -269,6 +285,10 @@ namespace OdinOnDemand.Components
             if (!mAudio.isPlaying && mAudio.time == 0f && !mAudio.loop) { //If the audio is not playing, and the time is 0, and it's not looping, then we're not playing anything
                 if (animator != null) animator.SetBool(PlayerSettings.Playing, false);
             }
+            
+            //trigger collider checks
+            if (!triggerCollider) return;
+            if(triggerCollider.radius != mAudio.maxDistance) triggerCollider.radius = mAudio.maxDistance;
         }
 
         private void SetupScreen() //Setup the screen, called on awake
@@ -415,6 +435,10 @@ namespace OdinOnDemand.Components
             if (PlayerSettings.playerLinkType == PlayerSettings.LinkType.Youtube || PlayerSettings.playerLinkType == PlayerSettings.LinkType.RelativeVideo || PlayerSettings.playerLinkType == PlayerSettings.LinkType.Video)
             {
                 mScreen.Play();
+                if (PlayerSettings.IsPaused)
+                {
+                    PlayerSettings.IsPaused = false;
+                }
                 if (animator) animator.SetBool(PlayerSettings.Playing, true);
                 //m_audio.Play();
             }
@@ -959,21 +983,21 @@ namespace OdinOnDemand.Components
         
         private void OnTriggerEnter(Collider other) //Show screen plane when player is in range
         {
-            if (mScreen.isPlaying)
+            if (mScreen.isPlaying && OODConfig.ScreenDisableOutOfRange.Value)
                 if (screenPlaneObj && other.gameObject.layer == 9)
                     screenPlaneObj.SetActive(true);
         }
 
         private void OnTriggerExit(Collider other) //Hide screen plane when player is out of range
         {
-            if (mScreen.isPlaying)
+            if (mScreen.isPlaying && OODConfig.ScreenDisableOutOfRange.Value)
                 if (screenPlaneObj && other.gameObject.layer == 9)
                     screenPlaneObj.SetActive(false);
         }
 
         private void OnTriggerStay(Collider other) //Show screen plane when player is in range
         {
-            if (mScreen.isPlaying)
+            if (mScreen.isPlaying && OODConfig.ScreenDisableOutOfRange.Value)
                 if (screenPlaneObj && other.gameObject.layer == 9)
                     screenPlaneObj.SetActive(true);
         }

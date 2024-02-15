@@ -13,6 +13,12 @@ namespace OdinOnDemand.Utils
             YouTubeExplode,
             NodeJs
         }
+        
+        public enum FadeType
+        {
+            Fade,
+            None
+        }
 
         public static ConfigEntry<string> NodeUrl { get; set; } // NodeJS Server URL
         public static ConfigEntry<string> YtAuthCode { get; private set; } // NodeJS Auth Code
@@ -36,6 +42,9 @@ namespace OdinOnDemand.Utils
         public static ConfigEntry<bool> VipMode { get; private set; }
         public static ConfigEntry<string> VipList { get; private set; }
         public static ConfigEntry<string> VipMessage { get; private set; }
+        
+        public static ConfigEntry<FadeType> AudioFadeType { get; private set; }
+        public static ConfigEntry<float> LowestVolumeDB { get; private set; }
         private static bool IsConfigChanged { get; set; }
 
         public static void Bind(ConfigFile config)
@@ -131,6 +140,14 @@ namespace OdinOnDemand.Utils
             VipMessage = config.Bind("VIP Mode", "VIP Message", "You are not allowed to perform this action.",
                 new ConfigDescription("The message displayed when a non-VIP attempts to access a VIP-only piece.", null,
                     new ConfigurationManagerAttributes { IsAdminOnly = true }));
+            
+            AudioFadeType = config.Bind("Client Side", "Music Fade Type", FadeType.Fade,
+                new ConfigDescription("How the in-game music fades in and out. Fade: Gradually changes volume based off distance from nearest active mediaplayer. None: No change.",
+                    null));
+            LowestVolumeDB = config.Bind("Client Side", "Lowest Fade Volume DB", -60f,
+                new ConfigDescription("The lowest volume the music will fade to in DB. -65-80 is completely silent, 0 is neutral volume.",
+                    new AcceptableValueRange<float>(-80f, 0f)));
+            
             /*
             assetsToLoad = config.Bind("OdinOnDemand", "Assets", "",
                 new ConfigDescription("seperated by commas", null,
