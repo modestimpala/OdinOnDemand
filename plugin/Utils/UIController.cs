@@ -791,6 +791,74 @@ namespace OdinOnDemand.Utils
                     : OODConfig.MasterVolumeMusicplayer.Value;
                 masterVolumeSliderComponent.onValueChanged.AddListener(OnMasterVolumeChanged);
                 
+                //////////////////////////////
+                /// VERTICAL DROPOFF PANEL ///
+                panel = DefaultControls.CreatePanel(oodResources);
+                panel.transform.SetParent(contentTransform, false);
+                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
+                image = panel.GetComponent<Image>();
+                image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
+                GUIManager.Instance.CreateText(
+                    "Vertical Drop-off",
+                    panel.transform,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(8f, 6f),
+                    GUIManager.Instance.AveriaSerifBold,
+                    12,
+                    GUIManager.Instance.ValheimOrange,
+                    true,
+                    Color.black,
+                    120f,
+                    18f,
+                    false);
+                inputObj = GUIManager.Instance.CreateInputField(
+                    panel.transform,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0f, -10f),
+                    InputField.ContentType.Standard,
+                    mediaPlayerComponent.PlayerSettings.VerticalDistanceDropoff.ToString(CultureInfo.CurrentCulture),
+                    14,
+                    110f,
+                    26f);
+                input = inputObj.GetComponent<InputField>();
+                input.contentType = InputField.ContentType.DecimalNumber;
+                input.onEndEdit.AddListener(OnVerticalDistanceDropoffInputEndEdit);
+                //////////////////////////////
+                /// VERTICAL DROPOFF POWER PANEL ///
+                panel = DefaultControls.CreatePanel(oodResources);
+                panel.transform.SetParent(contentTransform, false);
+                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
+                image = panel.GetComponent<Image>();
+                image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
+                GUIManager.Instance.CreateText(
+                    "Drop-off Power",
+                    panel.transform,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(8f, 6f),
+                    GUIManager.Instance.AveriaSerifBold,
+                    12,
+                    GUIManager.Instance.ValheimOrange,
+                    true,
+                    Color.black,
+                    120f,
+                    18f,
+                    false);
+                inputObj = GUIManager.Instance.CreateInputField(
+                    panel.transform,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0f, -10f),
+                    InputField.ContentType.Standard,
+                    mediaPlayerComponent.PlayerSettings.DropoffPower.ToString(CultureInfo.CurrentCulture),
+                    14,
+                    110f,
+                    26f);
+                input = inputObj.GetComponent<InputField>();
+                input.contentType = InputField.ContentType.DecimalNumber;
+                input.onEndEdit.AddListener(OnDropoffPowerInputEndEdit);
             }
         }
 
@@ -822,6 +890,7 @@ namespace OdinOnDemand.Utils
         private void OnVolumeSliderChanged(float vol)
         {
             mediaPlayerComponent.mAudio.volume = vol;
+            mediaPlayerComponent.PlayerSettings.Volume = vol;
             if (vol <= 0f)
             {
                 unmutedVolumeObj.SetActive(false);
@@ -851,6 +920,24 @@ namespace OdinOnDemand.Utils
             if (parse > OODConfig.MaxListeningDistance.Value && !SynchronizationManager.Instance.PlayerIsAdmin)
                 parse = OODConfig.MaxListeningDistance.Value;
             mediaPlayerComponent.mAudio.maxDistance = parse;
+            mediaPlayerComponent.SaveZDO();
+            rpc.SendData(CinemaPackage.RPCDataType.UpdateZDO, mediaPlayerComponent.PlayerSettings.PlayerType, mediaPlayerComponent.gameObject.transform.position);
+        }
+
+        private void OnVerticalDistanceDropoffInputEndEdit(string input)
+        {
+            if (input.Length < 1) return;
+            var parse = float.Parse(input);
+            mediaPlayerComponent.PlayerSettings.VerticalDistanceDropoff = parse;
+            mediaPlayerComponent.SaveZDO();
+            rpc.SendData(CinemaPackage.RPCDataType.UpdateZDO, mediaPlayerComponent.PlayerSettings.PlayerType, mediaPlayerComponent.gameObject.transform.position);
+        }
+        
+        private void OnDropoffPowerInputEndEdit(string input)
+        {
+            if (input.Length < 1) return;
+            var parse = float.Parse(input);
+            mediaPlayerComponent.PlayerSettings.DropoffPower = parse;
             mediaPlayerComponent.SaveZDO();
             rpc.SendData(CinemaPackage.RPCDataType.UpdateZDO, mediaPlayerComponent.PlayerSettings.PlayerType, mediaPlayerComponent.gameObject.transform.position);
         }

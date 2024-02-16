@@ -41,6 +41,10 @@ namespace OdinOnDemand.Utils
 
         public float MuteVol { set; get; } = 0.5f;
 
+        public float VerticalDistanceDropoff { set; get; } = 0f;
+        
+        public float DropoffPower { set; get; } = 1.5f;
+
         public CinemaPackage.MediaPlayers PlayerType { set; get; }
 
         public float Volume { set; get; } = 0.5f;
