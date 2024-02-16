@@ -122,7 +122,7 @@ namespace OdinOnDemand.Utils
                     null,
                     new ConfigurationManagerAttributes { IsAdminOnly = true }));
 
-            YouTubeExplodeTimeout = config.Bind("Server", "YoutubeExplode Timeout", 4000,
+            YouTubeExplodeTimeout = config.Bind("Server", "YoutubeExplode Timeout", 5000,
                 new ConfigDescription("Custom timeout for YoutubeExplode tasks", null,
                     new ConfigurationManagerAttributes { IsAdminOnly = true }));
 
