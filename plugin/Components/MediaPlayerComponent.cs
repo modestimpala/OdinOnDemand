@@ -110,6 +110,7 @@ namespace OdinOnDemand.Components
             // Repeating tasks
             InvokeRepeating(nameof(UpdateLoadingIndicator), 0.5f, 0.5f);
             InvokeRepeating(nameof(UpdateChecks), 1f, 1f);
+            InvokeRepeating(nameof(DropoffUpdate), 0.05f, 0.05f);
             
             if (PlayerSettings.IsFreshlyPlaced && ZNetScene.instance) //If we're freshly placed set some default data and flip bool
             {
@@ -186,6 +187,8 @@ namespace OdinOnDemand.Components
                 zdo.Set("autoPlay", PlayerSettings.AutoPlay);
                 zdo.Set("isLooping", PlayerSettings.IsLooping);
                 zdo.Set("isLocked", PlayerSettings.IsLocked);
+                zdo.Set("verticalDropoff", PlayerSettings.VerticalDistanceDropoff);
+                zdo.Set("dropoffPower", PlayerSettings.DropoffPower);
                 if (!string.IsNullOrEmpty(UnparsedURL)) zdo.Set("url", UnparsedURL);
             }
         }
@@ -210,6 +213,11 @@ namespace OdinOnDemand.Components
                 PlayerSettings.IsLooping = zdo.GetBool("isLooping");
                 mAudio.loop = PlayerSettings.IsLooping;
                 mScreen.isLooping = PlayerSettings.IsLooping;
+                PlayerSettings.VerticalDistanceDropoff = zdo.GetFloat("verticalDropoff");
+                if (zdo.GetFloat("dropoffPower") != 0f)
+                {
+                    PlayerSettings.DropoffPower = zdo.GetFloat("dropoffPower");
+                }
             }
         }
 
@@ -289,6 +297,34 @@ namespace OdinOnDemand.Components
             //trigger collider checks
             if (!triggerCollider) return;
             if(triggerCollider.radius != mAudio.maxDistance) triggerCollider.radius = mAudio.maxDistance;
+        }
+
+        private void DropoffUpdate()
+        {
+            if(PlayerSettings.IsPaused || UnparsedURL == null ) return;
+            //vertical distance dropoff
+            if (PlayerSettings.VerticalDistanceDropoff != 0f)
+            {
+                // Get the player's position
+                if(Player.m_localPlayer == null) return;
+                Vector3 playerPosition = Player.m_localPlayer.transform.position;
+
+                // Calculate the absolute difference in height
+                float heightDifference = Mathf.Abs(playerPosition.y - this.transform.position.y);
+
+                // If the height difference is greater than the dropoff distance
+                if (heightDifference > PlayerSettings.VerticalDistanceDropoff)
+                {
+                    // Decrease the volume based on the square of the height difference
+                    var volumeDecrease = 1 - 1/Mathf.Pow(heightDifference + 1, PlayerSettings.DropoffPower);
+                    mAudio.volume = Mathf.Max(0, PlayerSettings.Volume - volumeDecrease);
+                }
+                else
+                {
+                    // If the player is within the dropoff distance, set the volume to the original volume
+                    mAudio.volume = PlayerSettings.Volume;
+                }
+            }
         }
 
         private void SetupScreen() //Setup the screen, called on awake
