@@ -37,11 +37,13 @@ namespace OdinOnDemand
         
         private static Harmony _harmony;
         private static string _configFile;
+        public static ConfigFile _oodConfig { get; private set; }
 
         private void Awake()
         {
             //setup config
             OODConfig.Bind(Config);
+            _oodConfig = Config;
             _configFile = Paths.ConfigPath + "/com.ood.valmedia.recipes.json";
             OODConfig.SyncManager();
             
