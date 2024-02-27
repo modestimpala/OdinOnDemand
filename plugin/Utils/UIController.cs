@@ -955,8 +955,10 @@ namespace OdinOnDemand.Utils
                 OODConfig.MasterVolumeScreen.Value = vol;
             else
                 OODConfig.MasterVolumeMusicplayer.Value = vol;
+            
+            OODConfig.ReadAndWriteConfigValues(OdinOnDemandPlugin._oodConfig);
         }
-
+        
         public void ToggleMainPanel()
         {
             mediaPlayerComponent.UpdateZDO();
