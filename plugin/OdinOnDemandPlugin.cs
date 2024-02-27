@@ -63,7 +63,7 @@ namespace OdinOnDemand
             _harmony = new Harmony("Harmony.ValMedia.OOD");
             _harmony.PatchAll();
             
-            Jotunn.Logger.LogDebug("** OdinOnDemand Initialised **");
+            Jotunn.Logger.LogDebug("** OdinOnDemand Initialized **");
         }
 
         private void LoadAssets()
