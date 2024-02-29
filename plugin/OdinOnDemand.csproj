@@ -370,6 +370,19 @@
       <Content Include="..\README.md">
         <Link>README.md</Link>
       </Content>
+      <EmbeddedResource Include="Assets\dlls\AngleSharp.dll" />
+      <EmbeddedResource Include="Assets\dlls\Microsoft.Bcl.AsyncInterfaces.dll" />
+      <EmbeddedResource Include="Assets\dlls\Newtonsoft.Json.dll" />
+      <EmbeddedResource Include="Assets\dlls\SoundCloudExplode.dll" />
+      <EmbeddedResource Include="Assets\dlls\System.Buffers.dll" />
+      <EmbeddedResource Include="Assets\dlls\System.Memory.dll" />
+      <EmbeddedResource Include="Assets\dlls\System.Numerics.Vectors.dll" />
+      <EmbeddedResource Include="Assets\dlls\System.Runtime.CompilerServices.Unsafe.dll" />
+      <EmbeddedResource Include="Assets\dlls\System.Text.Encodings.Web.dll" />
+      <EmbeddedResource Include="Assets\dlls\System.Text.Json.dll" />
+      <EmbeddedResource Include="Assets\dlls\System.Threading.Tasks.Extensions.dll" />
+      <EmbeddedResource Include="Assets\dlls\System.ValueTuple.dll" />
+      <EmbeddedResource Include="Assets\dlls\YoutubeExplode.dll" />
       <Content Include="FodyWeavers.xml" />
     </ItemGroup>
     <PropertyGroup>

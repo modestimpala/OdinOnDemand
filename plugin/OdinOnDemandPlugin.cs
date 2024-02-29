@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
@@ -41,6 +42,23 @@ namespace OdinOnDemand
 
         private void Awake()
         {
+            AppDomain.CurrentDomain.AssemblyResolve += (sender, args) => {
+                string assemblyName = new AssemblyName(args.Name).Name + ".dll";
+                var resource = Assembly.GetExecutingAssembly().GetManifestResourceNames().FirstOrDefault(r => r.EndsWith(assemblyName));
+
+                if (resource != null)
+                {
+                    using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource))
+                    {
+                        byte[] assemblyData = new byte[stream.Length];
+                        stream.Read(assemblyData, 0, assemblyData.Length);
+                        return Assembly.Load(assemblyData);
+                    }
+                }
+
+                return null;
+            };
+
             //setup config
             OODConfig.Bind(Config);
             _oodConfig = Config;
