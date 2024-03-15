@@ -1,0 +1,24 @@
+﻿[
+  {
+    "Name": "$item_remote",
+    "CraftingStation": "piece_workbench",
+    "Requirements": [
+      {
+        "Item": "Bronze",
+        "Amount": 2
+      },
+      {
+        "Item": "GreydwarfEye",
+        "Amount": 1
+      }]
+  },
+  {
+    "Name": "$item_skaldsgirdle",
+    "CraftingStation": "piece_workbench",
+    "Requirements": [
+      {
+        "Item": "SwordCheat",
+        "Amount": 1
+      }]
+  }
+]

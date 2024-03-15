@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using Jotunn.Managers;
+using OdinOnDemand.Utils.Config;
 using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.UI;

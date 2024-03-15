@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Jotunn.Configs;
 
-namespace OdinOnDemand.Utils
+namespace OdinOnDemand.Utils.Config
 {
     // Data Transfer Object for PieceConfig so we can serialize it to JSON. Otherwise, we serialize too much unneeded data and things break.
     [Serializable]

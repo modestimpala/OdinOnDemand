@@ -1,8 +1,8 @@
 ﻿using System;
 using AngleSharp.Text;
 using HarmonyLib;
-using Jotunn;
 using OdinOnDemand.Utils;
+using OdinOnDemand.Utils.Config;
 
 namespace OdinOnDemand.Patches
 {

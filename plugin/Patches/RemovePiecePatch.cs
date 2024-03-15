@@ -2,6 +2,7 @@
 using AngleSharp.Text;
 using HarmonyLib;
 using OdinOnDemand.Utils;
+using OdinOnDemand.Utils.Config;
 using UnityEngine;
 using Logger = Jotunn.Logger;
 

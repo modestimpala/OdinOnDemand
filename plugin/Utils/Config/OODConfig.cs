@@ -1,10 +1,9 @@
 ﻿using BepInEx.Configuration;
 using Jotunn.Managers;
 using Jotunn.Utils;
-using UnityEngine;
 using Logger = Jotunn.Logger;
 
-namespace OdinOnDemand.Utils
+namespace OdinOnDemand.Utils.Config
 {
     public static class OODConfig // OdinOnDemandConfig
     {
@@ -27,16 +26,20 @@ namespace OdinOnDemand.Utils
         public static ConfigEntry<bool> AutoUpdateRecipes { get; private set; }
         public static ConfigEntry<bool> DebugEnabled { get; private set; }
         public static ConfigEntry<bool> VideoBacklight { get; private set; } 
+        public static ConfigEntry<bool> MobilePlayerVisuals { get; private set; } 
         public static ConfigEntry<bool> ScreenDisableOutOfRange { get; private set; }
         public static ConfigEntry<bool> RemoteControlOwnerOnly { get; private set; } 
         public static ConfigEntry<float> MasterVolumeScreen { get; private set; } 
         public static ConfigEntry<float> MasterVolumeMusicplayer { get; private set; }
+        public static ConfigEntry<float> MasterVolumeTransport { get; private set; }
         public static ConfigEntry<float> DefaultDistance { get; private set; }
         public static ConfigEntry<float> MaxListeningDistance { get; private set; }
+        public static ConfigEntry<float> MobileListeningDistance { get; private set; }
+        public static ConfigEntry<float> SyncTime { get; private set; }
+        public static ConfigEntry<bool> SkaldsGirdleEnabled { get; private set; }
+        public static ConfigEntry<int> SkaldsGirdleCost { get; private set; }
         public static ConfigEntry<float> RemoteControlDistance { get; private set; }
         public static ConfigEntry<float> DefaultAudioSourceVolume { get; private set; }
-        public static ConfigEntry<int> YouTubeExplodeTimeout { get; private set; } 
-        public static ConfigEntry<int> SoundCloudExplodeTimeout { get; private set; }
         private static ConfigEntryBase ChangedSetting { get; set; }
         public static ConfigEntry<YouTubeAPI> YoutubeAPI { get; private set; }
         public static ConfigEntry<bool> VipMode { get; private set; }
@@ -69,12 +72,16 @@ namespace OdinOnDemand.Utils
                         new ConfigurationManagerAttributes { IsAdminOnly = true }));
             }
 
-            MasterVolumeScreen = config.Bind("Client Side", "Screen Master Volume", 1f,
+            MasterVolumeScreen = config.Bind("Mixer Volumes", "Screen Master Volume", 1f,
                 new ConfigDescription("Master volume of all Screens. Clientside setting.",
                     new AcceptableValueRange<float>(-15f, 15f)));
 
-            MasterVolumeMusicplayer = config.Bind("Client Side", "Musicplayer Master Volume", 1f,
-                new ConfigDescription("Master volume of all Boomboxes and Gramophones. Clientside setting.",
+            MasterVolumeMusicplayer = config.Bind("Mixer Volumes", "Radio Master Volume", 1f,
+                new ConfigDescription("Master volume of all Radios. Clientside setting.",
+                    new AcceptableValueRange<float>(-15f, 15f)));
+            
+            MasterVolumeTransport = config.Bind("Mixer Volumes", "Mobile Player Master Volume", 1f,
+                new ConfigDescription("Master volume of all players roaming using Skald's Girdle or Bard's Wagon. Clientside setting.",
                     new AcceptableValueRange<float>(-15f, 15f)));
 
             DefaultDistance = config.Bind("Server", "Audio Default Distance", 75f,
@@ -85,6 +92,25 @@ namespace OdinOnDemand.Utils
                 new ConfigDescription(
                     "The maximum a viking can set a mediaplayer's listening distance to. Admins ignore this.", null,
                     new ConfigurationManagerAttributes { IsAdminOnly = true }));
+            
+            MobileListeningDistance = config.Bind("Server", "Mobile Player Listening Distance", 30f,
+                new ConfigDescription(
+                    "The listening distance of Mobile Players. Admins can still change their distance in the cog-wheel menu.", null,
+                    new ConfigurationManagerAttributes { IsAdminOnly = true }));
+            
+            SyncTime = config.Bind("Server", "Sync Time", 60f,
+                new ConfigDescription("The time in seconds between each send net-sync of the mediaplayer's current time. Lower values are more taxing on the server.",
+                    new AcceptableValueRange<float>(0.001f, float.MaxValue),
+                    new ConfigurationManagerAttributes { IsAdminOnly = true }));
+            
+            SkaldsGirdleEnabled = config.Bind("Server", "Skalds Girdle Sold at Haldor", true,
+                new ConfigDescription(
+                    "Whether or not Skald's Girdle is sold at the trader.", null,
+                    new ConfigurationManagerAttributes { IsAdminOnly = true }));
+            
+            SkaldsGirdleCost = config.Bind("Server", "Skalds Girdle Cost", 1000, new ConfigDescription(
+                "The cost of Skald's Girdle at the trader.", null,
+                new ConfigurationManagerAttributes { IsAdminOnly = true }));
 
             RemoteControlDistance = config.Bind("Remote Control", "Remote Control Distance", 25f,
                 new ConfigDescription("How far away you can control mediaplayers with the remote control.", null,
@@ -111,23 +137,17 @@ namespace OdinOnDemand.Utils
                 new ConfigDescription(
                     "This will make the screen unaffected by world light and look better. On by default. Only applied on newly placed screens."));
 
+            MobilePlayerVisuals = config.Bind("Client Side", "Mobile Player Visuals", true,
+                new ConfigDescription(
+                    "When enabled, cart players and skalds girdle will have a visual representation of audio playing as sound waves. "));
+            
             DebugEnabled = config.Bind("Client Side", "Debug Logging", false,
                 new ConfigDescription("Enable Extra Debug Logging"));
 
-
             ScreenDisableOutOfRange = config.Bind("Client Side", "Screens Stop Rendering Out of Range", false,
                 new ConfigDescription(
-                    "When a player is outside the audio range of a screen, the screen will stop rendering. " +
-                    "(Experimental, requires expensive distance calculations. With lots of screens this may add up.) ",
+                    "When a player is outside the audio range of a screen, the screen will stop rendering. ",
                     null,
-                    new ConfigurationManagerAttributes { IsAdminOnly = true }));
-
-            YouTubeExplodeTimeout = config.Bind("Server", "YoutubeExplode Timeout", 5000,
-                new ConfigDescription("Custom timeout for YoutubeExplode tasks", null,
-                    new ConfigurationManagerAttributes { IsAdminOnly = true }));
-
-            SoundCloudExplodeTimeout = config.Bind("Server", "SoundCloudExplode Timeout", 6000,
-                new ConfigDescription("Custom timeout for SoundCloudExplode tasks", null,
                     new ConfigurationManagerAttributes { IsAdminOnly = true }));
             
             VipMode = config.Bind("VIP Mode", "VIP Mode", false,
@@ -158,7 +178,7 @@ namespace OdinOnDemand.Utils
 
         public static void ReadAndWriteConfigValues(ConfigFile config)
         {
-            config.Save();
+            config?.Save();
         }
 
         private static void Config_SettingChanged(object sender, SettingChangedEventArgs e)
