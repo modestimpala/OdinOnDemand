@@ -45,22 +45,33 @@
         <Prefer32Bit>false</Prefer32Bit>
     </PropertyGroup>
     <ItemGroup>
+        <Compile Include="Components\BeltPlayerComponent.cs" />
+        <Compile Include="Components\CartPlayerComponent.cs" />
         <Compile Include="Components\MediaPlayerComponent.cs" />
         <Compile Include="Components\ReceiverComponent.cs" />
         <Compile Include="Components\RemoteControlItem.cs" />
         <Compile Include="Components\SpeakerComponent.cs" />
+        <Compile Include="Dynamic\AudioLoader.cs" />
+        <Compile Include="Dynamic\StationManager.cs" />
+        <Compile Include="Interfaces\IPlayer.cs" />
+        <Compile Include="MPlayer\AudioFader.cs" />
+        <Compile Include="MPlayer\RankSystem.cs" />
+        <Compile Include="Patches\HaldorCustomPatch.cs" />
         <Compile Include="Patches\PlacePiecePatch.cs" />
         <Compile Include="Patches\RemovePiecePatch.cs" />
-        <Compile Include="Utils\AudioFader.cs" />
-        <Compile Include="Utils\KeyConfig.cs" />
-        <Compile Include="Utils\LoadingCircle.cs" />
-        <Compile Include="Utils\PieceConfigDTO.cs" />
-        <Compile Include="Utils\PlayerSettings.cs" />
-        <Compile Include="Utils\RankSystem.cs" />
-        <Compile Include="Utils\ScrollingText.cs" />
-        <Compile Include="Utils\UIController.cs" />
-        <Compile Include="Utils\UrlGrab.cs" />
-        <Compile Include="Utils\OODConfig.cs" />
+        <Compile Include="MPlayer\BasePlayer.cs" />
+        <Compile Include="MPlayer\PlayerSettings.cs" />
+        <Compile Include="Utils\Config\KeyConfig.cs" />
+        <Compile Include="Utils\Config\OODConfig.cs" />
+        <Compile Include="Utils\Config\PieceConfigDTO.cs" />
+        <Compile Include="Utils\Net\ComponentLists.cs" />
+        <Compile Include="Utils\Net\Explode\Async.cs" />
+        <Compile Include="Utils\Net\Explode\UrlGrab.cs" />
+        <Compile Include="Utils\Net\RpcHandler.cs" />
+        <Compile Include="Utils\UI\AudioWaveformVisualizer.cs" />
+        <Compile Include="Utils\UI\LoadingCircle.cs" />
+        <Compile Include="Utils\UI\ScrollingText.cs" />
+        <Compile Include="Utils\UI\UIController.cs" />
         <Compile Include="Properties\IgnoreAccessModifiers.cs" />
         <Compile Include="Utils\ZNetExtensions.cs" />
         <Compile Include="OdinOnDemandPlugin.cs" />
@@ -383,7 +394,8 @@
       <EmbeddedResource Include="Assets\dlls\System.Threading.Tasks.Extensions.dll" />
       <EmbeddedResource Include="Assets\dlls\System.ValueTuple.dll" />
       <EmbeddedResource Include="Assets\dlls\YoutubeExplode.dll" />
-      <Content Include="FodyWeavers.xml" />
+      <EmbeddedResource Include="Assets\default_items.json" />
+      <Content Include="publish.ps1" />
     </ItemGroup>
     <PropertyGroup>
         <MOD_DEPLOYPATH Condition="!Exists('$(MOD_DEPLOYPATH)')">F:\SteamLibrary\steamapps\common\Valheim\BepInEx\plugins</MOD_DEPLOYPATH>

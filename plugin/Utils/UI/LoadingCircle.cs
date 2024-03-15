@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 
-namespace OdinOnDemand.Utils
+namespace OdinOnDemand.Utils.UI
 {
     public class LoadingCircle : MonoBehaviour
     {

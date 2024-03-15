@@ -14,7 +14,10 @@ using Jotunn.Utils;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using OdinOnDemand.Components;
+using OdinOnDemand.Dynamic;
 using OdinOnDemand.Utils;
+using OdinOnDemand.Utils.Config;
+using OdinOnDemand.Utils.Net;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Paths = BepInEx.Paths;
@@ -26,9 +29,9 @@ namespace OdinOnDemand
     [NetworkCompatibility(CompatibilityLevel.EveryoneMustHaveMod, VersionStrictness.Minor)]
     internal class OdinOnDemandPlugin : BaseUnityPlugin
     {
-        public const string PluginGUID = "com.ood.valmedia";
+        public const string PluginGUID = "com.valmedia.odinondemand";
         public const string PluginName = "OdinOnDemand";
-        public const string PluginVersion = "0.9.96";
+        public const string PluginVersion = "1.0.0";
 
         private static readonly CustomLocalization Localization = LocalizationManager.Instance.GetLocalization();
         public static readonly RpcHandler RPCHandlers = new RpcHandler();
@@ -37,8 +40,12 @@ namespace OdinOnDemand
         private AssetBundle _valMediaAssets;
         
         private static Harmony _harmony;
-        private static string _configFile;
-        public static ConfigFile _oodConfig { get; private set; }
+        private static string _pieceRecipeFile;
+        private static string _itemRecipeFile;
+        private static readonly string OdinConfigFolder = Paths.ConfigPath + "/OdinOnDemand/";
+        public static ConfigFile OdinConfig { get; private set; } = new ConfigFile(OdinConfigFolder + "config.cfg", true);
+        
+        public StationManager StationManager { get; private set; }
 
         private void Awake()
         {
@@ -60,30 +67,63 @@ namespace OdinOnDemand
             };
 
             //setup config
-            OODConfig.Bind(Config);
-            _oodConfig = Config;
-            _configFile = Paths.ConfigPath + "/com.ood.valmedia.recipes.json";
+            OODConfig.Bind(OdinConfig);
+            _pieceRecipeFile = OdinConfigFolder + "/recipes.json";
+            _itemRecipeFile = OdinConfigFolder + "/recipes_item.json";
             OODConfig.SyncManager();
-            
-            //Key Config
-            ConfigFile keyConfig = new ConfigFile(Path.Combine(Paths.ConfigPath, "com.ood.valmedia.keyconfig.cfg"), true);
-            SynchronizationManager.Instance.RegisterCustomConfig(keyConfig);
-            KeyConfig.SetupKeyConfig(keyConfig);
             
             //create rpc handler
             RPCHandlers.Create();
+            
+            var stationMan = new GameObject("OODStationMan");
+            StationManager = stationMan.AddComponent<StationManager>();
+            DontDestroyOnLoad(stationMan);
             
             //init config
             AddLocalizations();
             
             //load assets and configure pieces and items
             LoadAssets();
+            PrefabManager.OnVanillaPrefabsAvailable += AddCartVariant;
+            
+            //Key Config
+            ConfigFile keyConfig = new ConfigFile(Path.Combine(OdinConfigFolder, "com.ood.valmedia.keyconfig.cfg"), true);
+            SynchronizationManager.Instance.RegisterCustomConfig(keyConfig);
+            KeyConfig.SetupKeyConfig(keyConfig);
             
             //setup harmony patches
             _harmony = new Harmony("Harmony.ValMedia.OOD");
             _harmony.PatchAll();
             
             Jotunn.Logger.LogDebug("** OdinOnDemand Initialized **");
+        }
+
+        private static void AddCartVariant()
+        {
+            var pieceConfig = new PieceConfig();
+            pieceConfig.Name = "Bard's Wagon";
+            pieceConfig.Description = "A mobile media player on wheels, controlled by a remote.";
+            pieceConfig.PieceTable = "Hammer";
+            pieceConfig.Category = "OOD";
+            pieceConfig.AddRequirement(new RequirementConfig("Wood", 26));
+            pieceConfig.AddRequirement(new RequirementConfig("Bronze", 2));
+            pieceConfig.AddRequirement(new RequirementConfig("BronzeNails", 14));
+            
+            
+            var assets = AssetUtils.LoadAssetBundleFromResources("videoplayers", typeof(OdinOnDemandPlugin).Assembly);
+            var attach = assets.LoadAsset<GameObject>("assets/cartplayer_attach.prefab");
+            pieceConfig.Icon = assets.LoadAsset<Sprite>("assets/MOD ICONS/cartplayericon.png");
+            
+            
+            if (PieceManager.Instance.AddPiece(new CustomPiece("cartplayer", "Cart", pieceConfig)))
+            {
+                var cart = PrefabManager.Instance.GetPrefab("cartplayer");
+                Instantiate(attach, cart.transform, true);
+                cart.transform.Find("cartplayer_attach(Clone)").gameObject.AddComponent<CartPlayerComponent>();
+            }
+           
+            assets.Unload(false);
+            PrefabManager.OnVanillaPrefabsAvailable -= AddCartVariant;
         }
 
         private void LoadAssets()
@@ -107,51 +147,63 @@ namespace OdinOnDemand
                     UISprites.Add(sprite.name, sprite);
                 }
             }
-            
             //unload assetbundle after we have our assets
             _valMediaAssets.Unload(false);
         }
         
         private void AddRecipes()
         {
-            AddRemoteRecipe(); //Remote recipe
-
             //Piece recipes
-            if (!File.Exists(_configFile))
+            if (!File.Exists(_pieceRecipeFile))
             {
-                LoadDefaultRecipes(true);
+                WriteDefaultPieceConfig("default.json");
                 Jotunn.Logger.LogDebug(
-                    "Did not find recipe json, loading and writing default recipes to: " + Paths.ConfigPath + "/com.ood.valmedia.recipes.json");
-                return;
+                    "Did not find recipe json, loading and writing default recipes to: " + _pieceRecipeFile);
+            }
+            //Item recipes
+            if(!File.Exists(_itemRecipeFile))
+            {
+                WriteDefaultItemConfig("default_items.json");
+                Jotunn.Logger.LogDebug(
+                    "Did not find item recipe json, loading and writing default recipes to: " + _itemRecipeFile);
             }
             
-            var recipeStringFromFile = File.ReadAllText(_configFile);
             
-            if (!IsValidJson(recipeStringFromFile))
+            var pieceRecipesStringFromFile = File.ReadAllText(_pieceRecipeFile);
+            if (!IsValidJson(pieceRecipesStringFromFile))
             {
-                LoadDefaultRecipes();
+                WriteDefaultPieceConfig("default.json");
                 Jotunn.Logger.LogWarning(
                     "JSON in com.ood.valmedia.recipes.json is invalid. Setting to default recipes. " +
                     "If you wish to edit recipes please use a JSON validator or delete your recipe file and restart the game for a new default file.");
-                return;
+            }
+            var itemRecipesStringFromFile = File.ReadAllText(_itemRecipeFile);
+            if(!IsValidJson(itemRecipesStringFromFile))
+            {
+                WriteDefaultItemConfig("default_items.json");
+                Jotunn.Logger.LogWarning(
+                    "JSON in com.ood.valmedia.recipes_item.json is invalid. Setting to default recipes. " +
+                    "If you wish to edit recipes please use a JSON validator or delete your recipe file and restart the game for a new default file.");
             }
             
             //check if old recipe file, if so update to new recipes
-            var oldRecipeBool = !recipeStringFromFile.Contains("receiver") || !recipeStringFromFile.Contains("theater") ||
-                                !recipeStringFromFile.Contains("speaker");
+            var oldRecipeBool = !pieceRecipesStringFromFile.Contains("receiver") || !pieceRecipesStringFromFile.Contains("theater") ||
+                                !pieceRecipesStringFromFile.Contains("speaker"); // TODO recipe versioning
             if (oldRecipeBool && OODConfig.AutoUpdateRecipes.Value) 
             {
                 Jotunn.Logger.LogDebug("Old recipe file detected. Updating to new recipes.");
-                List<PieceConfig> oldRecipes = PieceConfig.ListFromJson(recipeStringFromFile);
-                var newRecipes = RecipFromManifest();
-                
-                UpdateRecipeFile(newRecipes, oldRecipes, _configFile);
+                List<PieceConfig> oldRecipes = PieceConfig.ListFromJson(pieceRecipesStringFromFile);
+                var newRecipes = FileFromManifest("OdinOnDemand.Assets.default.json");
+                UpdateRecipeFile(newRecipes, oldRecipes, _pieceRecipeFile);
             }
             else
             {
                 if(!OODConfig.AutoUpdateRecipes.Value) Jotunn.Logger.LogWarning("Auto recipe update disabled. Skipping recipe update.");
-                LoadRecipes(PieceConfig.ListFromJson(recipeStringFromFile));
             }
+            
+            LoadPieceConfigList(PieceConfig.ListFromJson(pieceRecipesStringFromFile));
+            LoadItemConfigList(ItemConfig.ListFromJson(itemRecipesStringFromFile));
+            
         }
 
         private void UpdateRecipeFile(string newRecipes, List<PieceConfig> oldRecipes, string file)
@@ -160,18 +212,17 @@ namespace OdinOnDemand
             {
                 var newRecipeList = PieceConfig.ListFromJson(newRecipes);
                 MergeRecipes(oldRecipes, newRecipeList);
-
-                LoadRecipes(oldRecipes);
+                
                 try
                 {
-                    var dtoList = Utils.PieceConfigDTO.ToDTOList(oldRecipes);
+                    var dtoList = PieceConfigDTO.ToDTOList(oldRecipes);
                     string json = JsonConvert.SerializeObject(dtoList, Formatting.Indented);
                     File.WriteAllText(file, json);
                 }
                 catch (Exception e)
                 {
                     Jotunn.Logger.LogError("Failed to write new recipes to file. Check log for details.");
-                    Jotunn.Logger.LogDebug(e);
+                    Jotunn.Logger.LogWarning(e);
                 }
             }
             else
@@ -192,94 +243,77 @@ namespace OdinOnDemand
             }
         }
 
-        private void AddRemoteRecipe()
-        {
-            // Remote config
-            //TODO: Item json recipes
-            var remoteConfig = new ItemConfig
-            {
-                Amount = 1
-            };
-
-            remoteConfig.AddRequirement(new RequirementConfig("Bronze", 1));
-            var tex = _valMediaAssets.LoadAsset<Texture2D>("assets/MOD ICONS/remoteicon.png");
-            var mySprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), Vector2.zero);
-            remoteConfig.Icons.AddItem(mySprite);
-
-            var remoteItem = new CustomItem(_valMediaAssets, "remote", false, remoteConfig);
-            ItemManager.Instance.AddItem(remoteItem);
-            var preloadAsset = PrefabManager.Instance.GetPrefab("remote");
-            preloadAsset.transform.Find("attach").gameObject.AddComponent<RemoteControlItem>();
-        }
-
-        private void LoadDefaultRecipes(bool writeToFile = false)
+        private void WriteDefaultPieceConfig(string fileName)
         {
             try
             {
-                var file = Paths.ConfigPath + "/com.ood.valmedia.recipes.json";
-                var defaultRecip = RecipFromManifest();
-                if (defaultRecip != "")
-                {
-                    LoadRecipes(PieceConfig.ListFromJson(defaultRecip));
-                }
-                else
-                {
-                    Jotunn.Logger.LogError("FATAL Failed to load default recipes.");
-                }
+                var file = _pieceRecipeFile;
+                var defaultRecip = FileFromManifest("OdinOnDemand.Assets." + fileName);
 
-                if (writeToFile)
-                {
-                    var writer = File.CreateText(file);
-                    writer.Write(defaultRecip);
-                    writer.Close();
-                    writer.Dispose();
-                }
+                var writer = File.CreateText(file);
+                writer.Write(defaultRecip);
+                writer.Close();
+                writer.Dispose();
+                
             } catch (Exception ex)
             {
                 Jotunn.Logger.LogError("Exception when handling default recipe file. Check log for details.");
-                Jotunn.Logger.LogDebug(ex);
+                Jotunn.Logger.LogWarning(ex);
+            }
+        }
+        
+        private void WriteDefaultItemConfig(string fileName)
+        {
+            try
+            {
+                var file = _itemRecipeFile;
+                var defaultRecip = FileFromManifest("OdinOnDemand.Assets." + fileName);
+                
+                var writer = File.CreateText(file);
+                writer.Write(defaultRecip);
+                writer.Close();
+                writer.Dispose();
+                
+            } catch (Exception ex)
+            {
+                Jotunn.Logger.LogError("Exception when handling default recipe file. Check log for details.");
+                Jotunn.Logger.LogWarning(ex);
             }
         }
 
-        private static string RecipFromManifest()
+        private static string FileFromManifest(string file)
         {
-            var defaultRecip = "";
+            var manifestFile = "";
             using var stream =
-                typeof(OdinOnDemandPlugin).Assembly.GetManifestResourceStream("OdinOnDemand.Assets.default.json");
+                typeof(OdinOnDemandPlugin).Assembly.GetManifestResourceStream(file);
             if (stream != null)
             {
                 using var reader = new StreamReader(stream);
-                defaultRecip = reader.ReadToEnd();
+                manifestFile = reader.ReadToEnd();
             }
-            stream?.Dispose();
-            return defaultRecip;
+            return manifestFile;
         }
 
 
-        private void LoadRecipes(List<PieceConfig> pieceConfigs)  //Loads recipes from the json file after it's parsed to a list
+        private void LoadPieceConfigList(List<PieceConfig> pieceConfigs)  //Loads recipes from the json file after it's parsed to a list
         {
             pieceConfigs.ForEach(c =>
             {
-                var properName = LocalizationManager.Instance.TryTranslate(c.Name).ToLower().Replace(" ", "");
+                var properName = LocalizationManager.Instance.TryTranslate(c.Name).ToLower().Replace(" ", "").Replace("'", "");
                 var tex = _valMediaAssets.LoadAsset<Texture2D>("assets/MOD ICONS/" + properName + "icon.png");
                 var mySprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), Vector2.zero);
-                c.Icon = mySprite; //TODO: procedural icon generation
-                //Jotunn.Logger.LogInfo("Adding recipe for " + properName);
+                c.Icon = mySprite; //TODO: procedural icon generation, or embedded icons in assetbundle
                 PieceManager.Instance.AddPiece(new CustomPiece(_valMediaAssets, properName, false, c));
-                var preloadAsset = PrefabManager.Instance.GetPrefab(properName);
-                
-                if(properName.Contains("speaker"))
-                {
-                    preloadAsset.AddComponent<SpeakerComponent>();
-                    
-                } else if (properName.Contains("receiver"))
-                {
-                    preloadAsset.AddComponent<ReceiverComponent>();
-                }
-                else
-                {
-                    preloadAsset.AddComponent<MediaPlayerComponent>();
-                }
+            });
+        }
+        
+        private void LoadItemConfigList(List<ItemConfig> itemConfigs)  //Loads recipes from the json file after it's parsed to a list
+        {
+            itemConfigs.ForEach(c =>
+            {
+                var properName = LocalizationManager.Instance.TryTranslate(c.Name).ToLower().Replace(" ", "").Replace("'", "");
+                Logger.LogDebug("Adding item: " + properName);
+                ItemManager.Instance.AddItem(new CustomItem(_valMediaAssets, properName, false, c));
             });
         }
         
@@ -300,10 +334,13 @@ namespace OdinOnDemand
                 { "piece_radio", "Radio" },
                 { "piece_standingspeaker", "Standing Speaker" },
                 { "item_remote", "Remote Control" },
+                { "item_skaldsgirdle", "Skald's Girdle" },
                 { "remote_usehint", "Use Screen" },
                 { "remote_linkhint", "Link/Unlink" },
+                { "skaldsgirdle_hint", "Consult Skald"},
                 { "remote_changelinkmodehint", "Change Link Mode"},
-                { "item_remote_description", "Allows you to use media-players from a distance." }
+                { "item_remote_description", "Allows you to use media-players from a distance." },
+                { "item_skaldsgirdle_description", "Allows you to commune with Skald while traveling."}
             });
         }
         
@@ -322,12 +359,12 @@ namespace OdinOnDemand
                 catch (JsonReaderException jex)
                 {
                     //Exception in parsing json
-                    Jotunn.Logger.LogDebug(jex.Message);
+                    Jotunn.Logger.LogWarning(jex.Message);
                     return false;
                 }
                 catch (Exception ex) //some other exception
                 {
-                    Jotunn.Logger.LogDebug(ex.ToString());
+                    Jotunn.Logger.LogWarning(ex.ToString());
                     return false;
                 }
 

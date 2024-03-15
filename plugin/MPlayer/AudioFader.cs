@@ -1,4 +1,7 @@
 ﻿using OdinOnDemand.Components;
+using OdinOnDemand.MPlayer;
+using OdinOnDemand.Utils.Config;
+using OdinOnDemand.Utils.Net;
 using UnityEngine;
 
 
@@ -54,32 +57,39 @@ namespace OdinOnDemand.Utils
             _musicMan.m_musicSource.volume = Mathf.Pow(10.0f, volumeDb / 20.0f);
         }
         
-        private static (float, MediaPlayerComponent) GetDistanceFromMediaplayers()
+        private static (float, BasePlayer) GetDistanceFromMediaplayers()
         {
-            var mediaPlayers = RpcHandler.mediaPlayerList;
             if (!Player.m_localPlayer)
             {
                 return (float.MaxValue, null);
             }
+
             var playerPos = Player.m_localPlayer.transform.position;
-            var distance = float.MaxValue;
-            MediaPlayerComponent closestMediaPlayer = null;
-            foreach (var mediaPlayer in mediaPlayers)
+            float distance = float.MaxValue;
+            BasePlayer closestMediaPlayer = null;
+
+            foreach (var kvp in ComponentLists.MediaComponentLists)
             {
-                if (!mediaPlayer.mAudio.isPlaying && mediaPlayer.mAudio.time == 0f && !mediaPlayer.mAudio.loop)
+                foreach (BasePlayer component in kvp.Value)
                 {
-                    continue;
-                }
-                if(mediaPlayer.PlayerSettings.IsPaused)
-                {
-                    continue;
-                }
-                var mediaPlayerPos = mediaPlayer.transform.position;
-                var newDistance = Vector3.Distance(playerPos, mediaPlayerPos);
-                if (newDistance < distance)
-                {
-                    distance = newDistance;
-                    closestMediaPlayer = mediaPlayer;
+                    if(!component) continue;
+                    if (!component.mAudio.isPlaying && component.mAudio.time == 0f && !component.mAudio.loop)
+                    {
+                        continue;
+                    }
+
+                    if (component.PlayerSettings.IsPaused || !component.PlayerSettings.IsPlaying)
+                    {
+                        continue;
+                    }
+
+                    var mediaPlayerPos = component.transform.position;
+                    var newDistance = Vector3.Distance(playerPos, mediaPlayerPos);
+                    if (newDistance < distance)
+                    {
+                        distance = newDistance;
+                        closestMediaPlayer = component;
+                    }
                 }
             }
             return (distance, closestMediaPlayer);
