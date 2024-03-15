@@ -1,4 +1,6 @@
-﻿using UnityEngine;
+﻿using System;
+using OdinOnDemand.Utils.Net;
+using UnityEngine;
 
 namespace OdinOnDemand.Components
 {
@@ -6,11 +8,46 @@ namespace OdinOnDemand.Components
     {
         public Piece mPiece { get; set; }
         public string mName;
+        public string mGUID;
+        public ZNetView ZNetView;
 
         private void Awake()
         {
-            mPiece = gameObject.GetComponentInChildren<Piece>();
+            mPiece = GetComponentInChildren<Piece>();
             mName = mPiece.m_name;
+            ZNetView = GetComponentInChildren<ZNetView>();
+            
+            ComponentLists.SpeakerComponentList.Add(this);
+        }
+        
+        public void OnEnable()
+        {
+            if (mPiece.IsPlacedByPlayer())
+            {
+                LoadZDO(); // If the player is placed by a player, load the zdo data to init}
+                if (mGUID == null)
+                {
+                    mGUID = System.IO.Path.GetRandomFileName().Replace(".", "") + "-" + DateTime.Now.Ticks +  "-" + Player.m_localPlayer.GetZDOID().UserID;
+                    SaveZDO();
+                }
+            }
+        }
+        
+        private void OnDestroy()
+        {
+            ComponentLists.SpeakerComponentList.Remove(this);
+        }
+        
+        public void SaveZDO()
+        {
+            ZDO zdo = ZNetView.GetZDO();
+            zdo.Set("guid", mGUID);
+        }
+        
+        public void LoadZDO()
+        {
+            ZDO zdo = ZNetView.GetZDO();
+            mGUID = zdo.GetString("guid", mGUID);
         }
 
         public string GetHoverName()
