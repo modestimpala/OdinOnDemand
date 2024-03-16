@@ -1,4 +1,5 @@
 ﻿using System;
+using OdinOnDemand.Utils.Config;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -21,8 +22,9 @@ namespace OdinOnDemand.Utils.UI
         private bool _initialUpdateDone = false; // Flag to ensure initial update
         [SerializeField] private int midStartIndex = 10;
         [SerializeField] private int midEndIndex = 32;
-        [SerializeField] private float midScalingFactor = 5f;
-        [SerializeField] private float highScalingFactor = 8.0f;
+        [SerializeField] private float midScalingFactor = OODConfig.VisualizerScaleFactorMid.Value;
+        [SerializeField] private float highScalingFactor = OODConfig.VisualizerScaleFactorHigh.Value;
+        [SerializeField] private float baseScalingFactor = OODConfig.VisualizerScaleFactorBase.Value;
 
         public void Setup(AudioSource audio)
         {
@@ -68,40 +70,32 @@ namespace OdinOnDemand.Utils.UI
                 barObject.transform.SetParent(transform, false);
 
                 RectTransform barTransform = barObject.AddComponent<RectTransform>();
-
-                // Set the bar's size
                 barTransform.sizeDelta = new Vector2(barWidth, GetComponent<RectTransform>().rect.height);
-
-                // Anchor bars to the middle horizontally and set their positions
                 barTransform.anchorMin = new Vector2(0.5f, 0);
                 barTransform.anchorMax = new Vector2(0.5f, 1);
                 barTransform.pivot = new Vector2(0.5f, 0.5f);
-                barTransform.anchoredPosition =
-                    new Vector2((barWidth + spacing) * i - GetComponent<RectTransform>().rect.width / 2 + barWidth / 2,
-                        0);
+                barTransform.anchoredPosition = new Vector2((barWidth + spacing) * i - GetComponent<RectTransform>().rect.width / 2 + barWidth / 2, 0);
 
-                // Add an Image component and set its sprite
                 Image barImage = barObject.AddComponent<Image>();
                 barImage.sprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
 
-                // Add optional effects to the bar
                 if (enableGlowEffect)
                 {
                     barImage.material = new Material(Shader.Find("UI/Default"));
                     barImage.material.EnableKeyword("_EMISSION");
                     barImage.material.SetColor("_EmissionColor", Color.white);
                 }
+
                 if (enableOutlineEffect)
                 {
                     Outline outlineEffect = barObject.AddComponent<Outline>();
                     outlineEffect.effectColor = Color.black;
                 }
-                
-                maxHeight = GetComponent<RectTransform>().rect.height;
-                
+
                 bars[i] = barTransform;
             }
         }
+
 
         private void Update()
         {
@@ -109,6 +103,8 @@ namespace OdinOnDemand.Utils.UI
             {
                 float[] spectrumData = new float[128];
                 audioSource.GetSpectrumData(spectrumData, 0, FFTWindow.Rectangular);
+                var parent = transform.parent;
+                float parentHeight = parent.GetComponent<RectTransform>().rect.height / parent.localScale.y;
 
                 for (int i = 0; i < bars.Length; i++)
                 {
@@ -118,11 +114,11 @@ namespace OdinOnDemand.Utils.UI
                         scalingFactor = midScalingFactor;
                     else if (i > midEndIndex) // High frequencies
                         scalingFactor = highScalingFactor;
-                    if(i == 0)
+                    if(i >= 0 && i <=3)
                         scalingFactor = 0.25f; // Lowest frequencies
                     
-                    float targetHeight = spectrumData[i] * scalingFactor * 10 + minHeight;
-                    targetHeight = Mathf.Clamp(targetHeight, minHeight, maxHeight);
+                    float targetHeight = spectrumData[i] * scalingFactor * baseScalingFactor + minHeight;
+                    targetHeight = Mathf.Clamp(targetHeight, minHeight, Mathf.Min(maxHeight, parentHeight));
 
                     // Smoothly interpolate the current height towards the target height
                     float height = Mathf.Lerp(bars[i].localScale.y, targetHeight, Time.deltaTime * smoothing);
