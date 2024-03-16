@@ -67,12 +67,14 @@ namespace OdinOnDemand.Dynamic
         {
             //find all asset bundles in radio folder subfolder from bepinex plugin folder
             var pluginPath = Assembly.GetExecutingAssembly().Location.Replace("OdinOnDemand.dll", "");
+            if(!Directory.Exists(pluginPath + "assetbundles")) Directory.CreateDirectory(pluginPath + "assetbundles");
             foreach (var assetBundlePath in System.IO.Directory.GetFiles(pluginPath + "assetbundles"))
             {
                 var assetBundle = AssetBundle.LoadFromFile(assetBundlePath);
                 AddStation(AudioLoader.CreateFromAssetBundle(assetBundle));
             }
             //find all audio clips in radio folder subfolder from bepinex plugin folder
+            if(!Directory.Exists(pluginPath + "radio")) Directory.CreateDirectory(pluginPath + "radio");
             foreach (var folderPath in System.IO.Directory.GetDirectories(pluginPath + "radio"))
             {
                 StartCoroutine(AudioLoader.CreateFromFolderCoroutine(folderPath, (station) =>
@@ -97,6 +99,19 @@ namespace OdinOnDemand.Dynamic
                     {
                         var assetBundles = Directory.GetFiles(assetBundleFolder);
                         foreach (var assetBundlePath in assetBundles)
+                        {
+                            var assetBundle = AssetBundle.LoadFromFile(assetBundlePath);
+                            if(!assetBundle) continue;
+                            Logger.LogInfo("Found radio station addon: " + assetBundle.name);
+                            AddStation(AudioLoader.CreateFromAssetBundle(assetBundle));
+                        }
+                    }
+                    var assetBundleFiles = Directory.GetFiles(folder, "*.*", SearchOption.AllDirectories)
+                        .Where(s => s.EndsWith(".assetbundle"));
+                    var assetBundlePaths = assetBundleFiles.ToList();
+                    if (assetBundlePaths.Any())
+                    {
+                        foreach (var assetBundlePath in assetBundlePaths)
                         {
                             var assetBundle = AssetBundle.LoadFromFile(assetBundlePath);
                             if(!assetBundle) continue;
