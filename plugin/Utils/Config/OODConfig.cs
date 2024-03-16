@@ -38,6 +38,9 @@ namespace OdinOnDemand.Utils.Config
         public static ConfigEntry<float> SyncTime { get; private set; }
         public static ConfigEntry<bool> SkaldsGirdleEnabled { get; private set; }
         public static ConfigEntry<int> SkaldsGirdleCost { get; private set; }
+        public static ConfigEntry<float> VisualizerScaleFactorBase { get; private set; }
+        public static ConfigEntry<float> VisualizerScaleFactorMid { get; private set; }
+        public static ConfigEntry<float> VisualizerScaleFactorHigh { get; private set; }
         public static ConfigEntry<float> RemoteControlDistance { get; private set; }
         public static ConfigEntry<float> DefaultAudioSourceVolume { get; private set; }
         private static ConfigEntryBase ChangedSetting { get; set; }
@@ -98,7 +101,7 @@ namespace OdinOnDemand.Utils.Config
                     "The listening distance of Mobile Players. Admins can still change their distance in the cog-wheel menu.", null,
                     new ConfigurationManagerAttributes { IsAdminOnly = true }));
             
-            SyncTime = config.Bind("Server", "Sync Time", 60f,
+            SyncTime = config.Bind("Server", "Sync Time", 30f,
                 new ConfigDescription("The time in seconds between each send net-sync of the mediaplayer's current time. Lower values are more taxing on the server.",
                     new AcceptableValueRange<float>(0.001f, float.MaxValue),
                     new ConfigurationManagerAttributes { IsAdminOnly = true }));
@@ -111,7 +114,16 @@ namespace OdinOnDemand.Utils.Config
             SkaldsGirdleCost = config.Bind("Server", "Skalds Girdle Cost", 1000, new ConfigDescription(
                 "The cost of Skald's Girdle at the trader.", null,
                 new ConfigurationManagerAttributes { IsAdminOnly = true }));
+            
+            VisualizerScaleFactorBase = config.Bind("Waveform Visualizer", "Base Scale Factor", 6.5f, new ConfigDescription(
+                "The base scale factor of the audio visualizer. Higher values make the visualizer more sensitive to audio.", new AcceptableValueRange<float>(0.01f, 100f)));
+            
+            VisualizerScaleFactorMid = config.Bind("Waveform Visualizer", "Mid Scale Factor", 3f, new ConfigDescription(
+                "The scale factor of the mid-range frequencies of the audio visualizer. ", new AcceptableValueRange<float>(0.01f, 100)));
 
+            VisualizerScaleFactorHigh = config.Bind("Waveform Visualizer", "High Scale Factor", 4f, new ConfigDescription(
+                "The scale factor of the high-range frequencies of the audio visualizer. ", new AcceptableValueRange<float>(0.01f, 100)));
+            
             RemoteControlDistance = config.Bind("Remote Control", "Remote Control Distance", 25f,
                 new ConfigDescription("How far away you can control mediaplayers with the remote control.", null,
                     new ConfigurationManagerAttributes { IsAdminOnly = true }));
