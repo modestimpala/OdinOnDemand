@@ -250,8 +250,6 @@ namespace OdinOnDemand.Utils.UI
             _entryToggleGroup = _dynamicContentTransform.gameObject.AddComponent<ToggleGroup>();
             _entryToggleGroup.allowSwitchOff = false;
             _entryToggleGroup.SetAllTogglesOff();
-            var contentRT = _dynamicContentTransform.gameObject.GetComponent<RectTransform>();
-            contentRT.sizeDelta = new Vector2(0, 200);
 
             CreateUISpriteButton("play", _dynamicPanelObj.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 new Vector2(-150f, -57f), 34f, 34f,  () => 
@@ -641,9 +639,14 @@ namespace OdinOnDemand.Utils.UI
                 
                 _settingsPanelObj.SetActive(false);
                 var contentTransform = _settingsPanelObj.transform.Find("Viewport/Content");
-                contentTransform.gameObject.AddComponent<VerticalLayoutGroup>();
-                var contentRT = contentTransform.gameObject.GetComponent<RectTransform>();
-                contentRT.sizeDelta = new Vector2(0, 200);
+                var verticalLayoutGroup = contentTransform.gameObject.AddComponent<VerticalLayoutGroup>();
+                verticalLayoutGroup.childForceExpandWidth = true;
+                verticalLayoutGroup.childForceExpandHeight = true;
+                verticalLayoutGroup.childControlWidth = true;
+                verticalLayoutGroup.childControlHeight = true;
+                verticalLayoutGroup.childScaleHeight = true;
+                verticalLayoutGroup.childScaleWidth = true;
+                verticalLayoutGroup.spacing = 5f;
                 
                 //////////////////////////
                 /// ADMIN ONLY TOGGLE ///
@@ -654,6 +657,7 @@ namespace OdinOnDemand.Utils.UI
                     adminOnlyToggleObj.transform.SetParent(contentTransform, false);
                     var t = adminOnlyToggleObj.transform.Find("Label").GetComponent<Text>();
                     _adminOnlyToggle = adminOnlyToggleObj.GetComponent<Toggle>();
+                    _adminOnlyToggle.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
                     _adminOnlyToggle.isOn = _basePlayer.PlayerSettings.AdminOnly;
                     _adminOnlyToggle.onValueChanged.AddListener(OnAdminOnlyToggleChanged);
                     GUIManager.Instance.ApplyTextStyle(t, GUIManager.Instance.AveriaSerifBold,
@@ -671,7 +675,7 @@ namespace OdinOnDemand.Utils.UI
                 {
                     var panelDistance = DefaultControls.CreatePanel(_oodResources);
                     panelDistance.transform.SetParent(contentTransform, false);
-                    panelDistance.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
+                    panelDistance.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 63);
                     var imageDistance = panelDistance.GetComponent<Image>();
                     imageDistance.color = new Color(imageDistance.color.r, imageDistance.color.g, imageDistance.color.b, 0.0155f);
 
@@ -708,7 +712,7 @@ namespace OdinOnDemand.Utils.UI
                 /// MASTER VOLUME PANEL ///
                 var panel = DefaultControls.CreatePanel(_oodResources);
                 panel.transform.SetParent(contentTransform, false);
-                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
+                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 64);
                 var image = panel.GetComponent<Image>();
                 image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
 
@@ -745,7 +749,7 @@ namespace OdinOnDemand.Utils.UI
                 {
                     panel = DefaultControls.CreatePanel(_oodResources);
                     panel.transform.SetParent(contentTransform, false);
-                    panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
+                    panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 64);
                     image = panel.GetComponent<Image>();
                     image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
                     GUIManager.Instance.CreateText(
@@ -779,7 +783,7 @@ namespace OdinOnDemand.Utils.UI
                     /// VERTICAL DROPOFF POWER PANEL ///
                     panel = DefaultControls.CreatePanel(_oodResources);
                     panel.transform.SetParent(contentTransform, false);
-                    panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
+                    panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 64);
                     image = panel.GetComponent<Image>();
                     image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
                     GUIManager.Instance.CreateText(
@@ -814,7 +818,7 @@ namespace OdinOnDemand.Utils.UI
                 /// SPEAKERS PANEL ///
                 panel = DefaultControls.CreatePanel(_oodResources);
                 panel.transform.SetParent(contentTransform, false);
-                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
+                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 64);
                 image = panel.GetComponent<Image>();
                 image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
                 var speakerTextObj = GUIManager.Instance.CreateText(
@@ -842,6 +846,41 @@ namespace OdinOnDemand.Utils.UI
                     26f);
                 var unlinkAllButtonAction = unlinkAllButton.GetComponent<Button>();
                 unlinkAllButtonAction.onClick.AddListener(() => _basePlayer.UnlinkAllSpeakers());
+                //////////////////////////////
+                /// TIME PANEL ///
+                panel = DefaultControls.CreatePanel(_oodResources);
+                panel.transform.SetParent(contentTransform, false);
+                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 64);
+                image = panel.GetComponent<Image>();
+                image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
+                var timeInputObj = GUIManager.Instance.CreateInputField(
+                    panel.transform,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0f, -10f),
+                    InputField.ContentType.Standard,
+                    _basePlayer.mScreen.time.ToString(CultureInfo.CurrentCulture),
+                    14,
+                    110f,
+                    26f);
+                var timeInput = timeInputObj.GetComponent<InputField>();
+                timeInput.contentType = InputField.ContentType.DecimalNumber;
+                var submitTimeButton = GUIManager.Instance.CreateButton(
+                    "Set Time",
+                    panel.transform,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(120f, -10f),
+                    120f,
+                    26f);
+                var submitTimeButtonAction = submitTimeButton.GetComponent<Button>();
+                submitTimeButtonAction.onClick.AddListener(() =>
+                {
+                    if(_basePlayer.PlayerSettings.CurrentMode == PlayerSettings.PlayerMode.Dynamic) return;
+                    if (timeInput.text.Length < 1) return;
+                    var parse = float.Parse(timeInput.text);
+                    _rpc.SendData(0, CinemaPackage.RPCDataType.SyncTime, _basePlayer.PlayerSettings.PlayerType, _basePlayer.MediaPlayerID, _basePlayer.gameObject.transform.position, parse);
+                });
             }
         }
 
