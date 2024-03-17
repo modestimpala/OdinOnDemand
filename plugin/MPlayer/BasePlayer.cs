@@ -1209,8 +1209,8 @@ namespace OdinOnDemand.MPlayer
                 BroadcastTime();
             }
         }
-        
-        private void SendRequestTimeSync_RPC()
+
+        internal void SendRequestTimeSync_RPC()
         {
             var zdo = ZNetView.GetZDO();
             if (zdo != null)

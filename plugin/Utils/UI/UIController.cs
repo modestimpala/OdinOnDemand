@@ -881,6 +881,26 @@ namespace OdinOnDemand.Utils.UI
                     var parse = float.Parse(timeInput.text);
                     _rpc.SendData(0, CinemaPackage.RPCDataType.SyncTime, _basePlayer.PlayerSettings.PlayerType, _basePlayer.MediaPlayerID, _basePlayer.gameObject.transform.position, parse);
                 });
+                //////////////////////////////
+                /// RESYNC PANEL ///
+                panel = DefaultControls.CreatePanel(_oodResources);
+                panel.transform.SetParent(contentTransform, false);
+                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 64);
+                image = panel.GetComponent<Image>();
+                image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
+                var resyncTimeButtonObj = GUIManager.Instance.CreateButton(
+                    "Re-Sync Player",
+                    panel.transform,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(120f, -10f),
+                    120f,
+                    26f);
+                var resyncTimeButton = resyncTimeButtonObj.GetComponent<Button>();
+                resyncTimeButton.onClick.AddListener(() =>
+                {
+                    _basePlayer.LoadZDO();
+                });
             }
         }
 
