@@ -97,7 +97,6 @@ namespace OdinOnDemand.MPlayer
                     {
                         RequestOwnership(zdo);
                         var id = GenerateUniqueID();
-                        Logger.LogDebug("Setting unique ID: " + id);
                         zdo.Set("MediaPlayerID", id); // Generate unique ID for this media player
                         SendUpdateZDO_RPC();
                     }
@@ -1205,9 +1204,9 @@ namespace OdinOnDemand.MPlayer
         
         private void SyncTime()
         {
-            if(PlayerSettings.IsPlaying  && (mScreen.isPlaying || mAudio.isPlaying))
+            if(mScreen.isPlaying || mAudio.isPlaying)
             {
-                SendRequestTimeSync_RPC();
+                BroadcastTime();
             }
         }
         
