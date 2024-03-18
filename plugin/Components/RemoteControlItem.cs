@@ -61,6 +61,8 @@ namespace OdinOnDemand.Components
                 {
                     if (selectedSpeaker != null)
                     {
+                        if(!basePlayerComponent.mPiece.IsCreator() && OODConfig.RemoteControlOwnerOnly.Value) return false;
+                        if (!PrivateArea.CheckAccess(transform.position)) return false;
                         if (basePlayerComponent.AddSpeaker(selectedSpeaker))
                         {
                             MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, "Speaker added to receiver");
@@ -72,7 +74,6 @@ namespace OdinOnDemand.Components
                             basePlayerComponent.RemoveSpeaker(selectedSpeaker);
                             MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, "Speaker removed from receiver");
                             selectedSpeaker = null;
-                            
                         }
                     }
                 }
@@ -81,13 +82,13 @@ namespace OdinOnDemand.Components
             var speaker = hit.transform.gameObject.GetComponentInParent<SpeakerComponent>();
             if (speaker != null)
             {
+                if (!speaker.mPiece.IsCreator() && OODConfig.RemoteControlOwnerOnly.Value) return false;
+                if (!PrivateArea.CheckAccess(transform.position)) return false;
                 selectedSpeaker = speaker;
                 MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, "Speaker selected");
                 return true;
             }
-
             return false;
-        
         }
         
         private bool ProcessRaycast()

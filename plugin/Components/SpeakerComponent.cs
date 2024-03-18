@@ -1,6 +1,8 @@
 ﻿using System;
 using OdinOnDemand.Utils.Net;
 using UnityEngine;
+using Logger = Jotunn.Logger;
+
 
 namespace OdinOnDemand.Components
 {
@@ -8,7 +10,7 @@ namespace OdinOnDemand.Components
     {
         public Piece mPiece { get; set; }
         public string mName;
-        public string mGUID;
+        public string mGUID = "";
         public ZNetView ZNetView;
 
         private void Awake()
@@ -25,9 +27,9 @@ namespace OdinOnDemand.Components
             if (mPiece.IsPlacedByPlayer())
             {
                 LoadZDO(); // If the player is placed by a player, load the zdo data to init}
-                if (mGUID == null)
+                if (string.IsNullOrEmpty(mGUID))
                 {
-                    mGUID = System.IO.Path.GetRandomFileName().Replace(".", "") + "-" + DateTime.Now.Ticks +  "-" + Player.m_localPlayer.GetZDOID().UserID;
+                    mGUID = System.IO.Path.GetRandomFileName().Replace(".", "") + "-" + DateTime.Now.Ticks;
                     SaveZDO();
                 }
             }
@@ -41,6 +43,8 @@ namespace OdinOnDemand.Components
         public void SaveZDO()
         {
             ZDO zdo = ZNetView.GetZDO();
+            if (!zdo.IsOwner())
+                zdo.SetOwner(ZDOMan.GetSessionID());
             zdo.Set("guid", mGUID);
         }
         
