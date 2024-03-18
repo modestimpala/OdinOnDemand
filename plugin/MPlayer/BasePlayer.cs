@@ -26,6 +26,7 @@ namespace OdinOnDemand.MPlayer
         // Media Player Core Components
         public VideoPlayer mScreen { get; set; }
         public AudioSource mAudio { get; set; }
+        public Piece mPiece { get; internal set; }
         public Animator Animator { get; set; }
         protected GameObject ScreenPlaneObj { get; set; }
         protected internal GameObject ScreenUICanvasObj { get; set; }

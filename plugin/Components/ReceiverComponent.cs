@@ -20,8 +20,6 @@ namespace OdinOnDemand.Components
 {
     public class ReceiverComponent : BasePlayer, Hoverable, Interactable
     {
-        public Piece mPiece { get; set; }
-        
         public new void Awake()
         {
             base.Awake();
@@ -197,25 +195,24 @@ namespace OdinOnDemand.Components
         
         public static byte[] CompressSpeakerList(HashSet<SpeakerComponent> speakers)
         {
-            using (var memoryStream = new MemoryStream())
+            if (speakers == null) return default;
+            using var memoryStream = new MemoryStream();
+            using (var binaryWriter = new BinaryWriter(memoryStream))
             {
-                using (var binaryWriter = new BinaryWriter(memoryStream))
-                {
-                    // Write the count of speakers first
-                    binaryWriter.Write(speakers.Count);
+                // Write the count of speakers first
+                binaryWriter.Write(speakers.Count);
 
-                    foreach (var speaker in speakers)
-                    {
-                        // Write the mGuid and position of each speaker
-                        binaryWriter.Write(speaker.mGUID);
-                        var position = speaker.transform.position;
-                        binaryWriter.Write(position.x);
-                        binaryWriter.Write(position.y);
-                        binaryWriter.Write(position.z);
-                    }
+                foreach (var speaker in speakers)
+                {
+                    // Write the mGuid and position of each speaker
+                    binaryWriter.Write(speaker.mGUID);
+                    var position = speaker.transform.position;
+                    binaryWriter.Write(position.x);
+                    binaryWriter.Write(position.y);
+                    binaryWriter.Write(position.z);
                 }
-                return memoryStream.ToArray();
             }
+            return memoryStream.ToArray();
         }
         public static HashSet<SpeakerComponent> DecompressSpeakerList(byte[] data)
         {

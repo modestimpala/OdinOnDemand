@@ -11,7 +11,7 @@ namespace OdinOnDemand.Components
     public class MediaPlayerComponent : BasePlayer, Hoverable, Interactable
     {
         private RenderTexture RenderTexture { get; set; }
-        private Piece mPiece { get; set; }
+        
 
         public new void Awake()
         {
