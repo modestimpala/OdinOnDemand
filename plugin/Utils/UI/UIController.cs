@@ -589,7 +589,7 @@ namespace OdinOnDemand.Utils.UI
 
         internal void UpdateSpeakerCount()
         {
-            _speakerText.text = "Speakers: " + _basePlayer.mSpeakers.Count;
+            if(_speakerText) _speakerText.text = "Speakers: " + _basePlayer.mSpeakers.Count;
         }
 
         private void CreateSettingsGUI(bool  adminOnlyEnabled = true, 
@@ -625,7 +625,7 @@ namespace OdinOnDemand.Utils.UI
                 _settingsPanelRT.anchoredPosition = new Vector2(0, 0);
 
                 var scrollviewBg = _settingsPanelObj.GetComponent<Image>();
-                scrollviewBg.color = new Color(0, 0, 0, 0.85f);
+                scrollviewBg.color = new Color(0, 0, 0, 0.95f);
                 var scrollRect = _settingsPanelObj.GetComponent<ScrollRect>();
                 scrollRect.vertical = true;
                 scrollRect.horizontal = false;
@@ -1012,7 +1012,8 @@ namespace OdinOnDemand.Utils.UI
             CreateMainGUI();
             UpdateLockIcon();
             UpdateLoopIndicator();
-
+            UpdateSpeakerCount();
+            
             if (_basePlayer.PlayerSettings.IsPlayingPlaylist)
             {
                 if(_urlInputField) _urlInputField.text = _basePlayer.PlaylistURL;
