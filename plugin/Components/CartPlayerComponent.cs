@@ -11,7 +11,6 @@ namespace OdinOnDemand.Components
 {
     public class CartPlayerComponent : BasePlayer
     {
-        public Piece mPiece { get; private set; }
         
         public new void Awake()
         {
