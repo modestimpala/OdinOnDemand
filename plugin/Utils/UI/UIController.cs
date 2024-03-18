@@ -3,7 +3,6 @@ using System.Collections;
 using System.Globalization;
 using System.Linq;
 using Jotunn.Managers;
-using OdinOnDemand.Components;
 using OdinOnDemand.Dynamic;
 using OdinOnDemand.Interfaces;
 using OdinOnDemand.MPlayer;
@@ -194,11 +193,11 @@ namespace OdinOnDemand.Utils.UI
             {
                     CreateDynamicAudioEntry(station.Title, station.Thumbnail, _dynamicContentTransform, 
                         new Vector2(0,0),
-                        onValueChanged);
+                        DynamicEntryValueChanged);
             }
         }
 
-        private void onValueChanged(bool value)
+        private void DynamicEntryValueChanged(bool value)
         {
             var active  = _entryToggleGroup.ActiveToggles().FirstOrDefault();
             if (active != null)
@@ -207,7 +206,7 @@ namespace OdinOnDemand.Utils.UI
                 _basePlayer.SetDynamicStation(station);
             }
         }
-
+        
         private void CreateDynamicPanel()
         {
             if (_dynamicPanelObj)
@@ -245,7 +244,7 @@ namespace OdinOnDemand.Utils.UI
             verticalLayoutGroup.childControlHeight = true;
             verticalLayoutGroup.childScaleHeight = true;
             verticalLayoutGroup.childScaleWidth = true;
-            verticalLayoutGroup.spacing = 5f;
+            verticalLayoutGroup.spacing = 1f;
             
             _entryToggleGroup = _dynamicContentTransform.gameObject.AddComponent<ToggleGroup>();
             _entryToggleGroup.allowSwitchOff = false;
@@ -675,7 +674,7 @@ namespace OdinOnDemand.Utils.UI
                 {
                     var panelDistance = DefaultControls.CreatePanel(_oodResources);
                     panelDistance.transform.SetParent(contentTransform, false);
-                    panelDistance.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 63);
+                    panelDistance.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 85);
                     var imageDistance = panelDistance.GetComponent<Image>();
                     imageDistance.color = new Color(imageDistance.color.r, imageDistance.color.g, imageDistance.color.b, 0.0155f);
 
@@ -712,7 +711,7 @@ namespace OdinOnDemand.Utils.UI
                 /// MASTER VOLUME PANEL ///
                 var panel = DefaultControls.CreatePanel(_oodResources);
                 panel.transform.SetParent(contentTransform, false);
-                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 64);
+                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 85);
                 var image = panel.GetComponent<Image>();
                 image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
 
@@ -749,7 +748,7 @@ namespace OdinOnDemand.Utils.UI
                 {
                     panel = DefaultControls.CreatePanel(_oodResources);
                     panel.transform.SetParent(contentTransform, false);
-                    panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 64);
+                    panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 85);
                     image = panel.GetComponent<Image>();
                     image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
                     GUIManager.Instance.CreateText(
@@ -783,7 +782,7 @@ namespace OdinOnDemand.Utils.UI
                     /// VERTICAL DROPOFF POWER PANEL ///
                     panel = DefaultControls.CreatePanel(_oodResources);
                     panel.transform.SetParent(contentTransform, false);
-                    panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 64);
+                    panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 85);
                     image = panel.GetComponent<Image>();
                     image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
                     GUIManager.Instance.CreateText(
@@ -818,7 +817,7 @@ namespace OdinOnDemand.Utils.UI
                 /// SPEAKERS PANEL ///
                 panel = DefaultControls.CreatePanel(_oodResources);
                 panel.transform.SetParent(contentTransform, false);
-                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 64);
+                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 85);
                 image = panel.GetComponent<Image>();
                 image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
                 var speakerTextObj = GUIManager.Instance.CreateText(
@@ -850,14 +849,14 @@ namespace OdinOnDemand.Utils.UI
                 /// TIME PANEL ///
                 panel = DefaultControls.CreatePanel(_oodResources);
                 panel.transform.SetParent(contentTransform, false);
-                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 64);
+                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 85);
                 image = panel.GetComponent<Image>();
                 image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
                 var timeInputObj = GUIManager.Instance.CreateInputField(
                     panel.transform,
                     new Vector2(0.5f, 0.5f),
                     new Vector2(0.5f, 0.5f),
-                    new Vector2(0f, -10f),
+                    new Vector2(0f, -2f),
                     InputField.ContentType.Standard,
                     _basePlayer.mScreen.time.ToString(CultureInfo.CurrentCulture),
                     14,
@@ -870,7 +869,7 @@ namespace OdinOnDemand.Utils.UI
                     panel.transform,
                     new Vector2(0.5f, 0.5f),
                     new Vector2(0.5f, 0.5f),
-                    new Vector2(120f, -10f),
+                    new Vector2(120f, -2f),
                     120f,
                     26f);
                 var submitTimeButtonAction = submitTimeButton.GetComponent<Button>();
@@ -885,21 +884,34 @@ namespace OdinOnDemand.Utils.UI
                 /// RESYNC PANEL ///
                 panel = DefaultControls.CreatePanel(_oodResources);
                 panel.transform.SetParent(contentTransform, false);
-                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 64);
+                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 75);
                 image = panel.GetComponent<Image>();
                 image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
-                var resyncTimeButtonObj = GUIManager.Instance.CreateButton(
-                    "Re-Sync Player",
+                var reloadPlayerObj = GUIManager.Instance.CreateButton(
+                    "Reload Player",
                     panel.transform,
                     new Vector2(0.5f, 0.5f),
                     new Vector2(0.5f, 0.5f),
-                    new Vector2(120f, -10f),
+                    new Vector2(-85f, 0),
                     120f,
                     26f);
-                var resyncTimeButton = resyncTimeButtonObj.GetComponent<Button>();
-                resyncTimeButton.onClick.AddListener(() =>
+                var reloadPlayerButton = reloadPlayerObj.GetComponent<Button>();
+                reloadPlayerButton.onClick.AddListener(() =>
                 {
                     _basePlayer.LoadZDO();
+                });
+                var resyncPlayerObj = GUIManager.Instance.CreateButton(
+                    "Sync Time",
+                    panel.transform,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(85f, 0),
+                    120f,
+                    26f);
+                var resyncPlayerButton = resyncPlayerObj.GetComponent<Button>();
+                resyncPlayerButton.onClick.AddListener(() =>
+                {
+                    _basePlayer.SendRequestTimeSync_RPC();
                 });
             }
         }
@@ -1197,14 +1209,19 @@ namespace OdinOnDemand.Utils.UI
         }
         private GameObject CreateDynamicAudioEntry(string text, Sprite sp, Transform parentTransform, Vector2 position, UnityAction<bool> onValueChanged)
         {
+            var panelDistance = DefaultControls.CreatePanel(_oodResources);
+            panelDistance.transform.SetParent(parentTransform, false);
+            var imageDistance = panelDistance.GetComponent<Image>();
+            imageDistance.color = new Color(imageDistance.color.r, imageDistance.color.g, imageDistance.color.b, 0.0155f);
+            
             var toggle     = DefaultControls.CreateToggle(_oodResources);
-            toggle.transform.SetParent(parentTransform, false);
+            toggle.transform.SetParent(panelDistance.transform, false);
             toggle.transform.localPosition = position;
-            var toggleRT = toggle.GetComponent<RectTransform>();
-            toggleRT.anchorMin = new Vector2(0f, 1f);
-            toggleRT.anchorMax = new Vector2(1f, 1f);
-            toggleRT.offsetMin = new Vector2(12.5f, -37.5f);
-            toggleRT.offsetMax = new Vector2(-12.5f, -2.5f);
+             var toggleRT = toggle.GetComponent<RectTransform>();
+             toggleRT.anchorMin = new Vector2(0f, 1f);
+             toggleRT.anchorMax = new Vector2(1f, 1f);
+             toggleRT.offsetMin = new Vector2(12.5f, -37.5f);
+             toggleRT.offsetMax = new Vector2(-12.5f, -2.5f);
             var textComp = toggle.transform.Find("Label").GetComponent<Text>();
             textComp.text = text;
             _entryToggle = toggle.GetComponent<Toggle>();
@@ -1221,18 +1238,7 @@ namespace OdinOnDemand.Utils.UI
             {
                 _entryToggle.transform.Find("Background").gameObject.SetActive(false);
             }
-            var check = _entryToggle.transform.Find("Background/Checkmark");
-            check.SetParent(toggle.transform);
-            //check.SetParent(toggle.transform.Find("Label"));
-            check.GetComponent<RectTransform>().sizeDelta =
-                new Vector2(16, 16);
-            /*
-            rt.anchorMin = new Vector2(0f, 0f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.offsetMin = new Vector2(0f, 0f);
-            rt.offsetMax = new Vector2(0f, 0f);
-            rt.sizeDelta = new Vector2(0, 0);
-            */
+            
             //compare title to current playing track
             if(_basePlayer.PlayerSettings?.DynamicStation?.Title == text)
             {
