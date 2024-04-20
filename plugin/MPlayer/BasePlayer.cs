@@ -633,7 +633,7 @@ namespace OdinOnDemand.MPlayer
         {
             var dh = new DownloadHandlerAudioClip(url, AudioType.MPEG)
             {
-                compressed = true // This
+                compressed = false // This needs to be false now or Unity crashes due to memory access violation, I think this causes the audio to decompress to PCM format instead of keeping in memory 
             };
             //Jotunn.Logger.LogDebug("testing coroutine");
             using var wr = new UnityWebRequest(url, "GET", dh, null);
