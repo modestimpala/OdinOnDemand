@@ -1,6 +1,84 @@
 
 
+
 ### Versions:
+
+## 1.0.6
+ - Fixed crash when attempting to listen to SoundCloud links
+
+## 1.0.5
+ - Updated to new game version
+
+## 1.0.4
+ - Added new settings buttons: Reload player, Sync Time
+ - Changed "SyncTime" repeated event to only broadcast if ZDO owner, instead of pinging server from each player
+ - Speakers now check for Owner & PrivateArea access
+ - Fix master volume mixer bug
+ - UI, Speaker Tweaks
+
+## 1.0.3
+ - Audio Waveform Visualizer tweaks:
+   - Added configurable waveform visualizer scale factors (turns out I have my volume settings very low)
+   - Tweaked base values to fit default volume levels better, if you have volume turned down then adjust your scale factors as needed
+   - Changes to height limits
+
+## 1.0.2
+ - Changed radio station addons to search for .assetbundle files due to flat file structure download from Thunderstore
+
+## 1.0.1
+ - Fixed missing directory issues
+ - Switch to OOD_LIB Dependancy package over Runtime Assembly Loading
+
+# 1.0.0
+ - Change: Config files moved to BepInEx\config\OdinOnDemand\[...]
+ - Improvement: **Multiplayer** - All videos and audio clips are now **fully multiplayer time synced** even upon fresh loading. Players will regularly sync time with current ZDO owner. All players "autoplay". This means that tracking forward and autoplay options have been removed. You can manually set seek time in seconds through the Cog wheel settings sub-menu. 
+ - New Piece: **Bard's Wagon** - A mobile mediaplayer on wheels!
+ - New Item: **Skald's Girdle** - An equipable mediaplayer sold by Haldor. 
+   - Control Cart Player & Skald's Girdle via the Remote Control item. Looping always enabled. 
+ - New Feature: **Linkable Speakers** - Speakers can now be (un)linked to all types of stationary mediaplayers via the remote control. This changes the center of their audio output, displayed briefly as a red circle.
+ - Improved Feature: **Reciever is now a mediaplayer**. 
+ - New Feature: **Dynamic Audio Stations** - Create radio stations from folders and assetbundles that are simulated server-side. When players have the same radio stations, they hear the same songs at the same time.
+ - New Feature: **Audio Waveform Visualizer** - Enabled when listening to dynamic stations, audio files & soundcloud on cinema screens and radio displays.
+ - Improvement: All mediaplayers can play audio files and Soundcloud.
+ - Improvement: **RPC overhaul** to reduce server side network load
+ - Improvement: *Explode handling overhaul to lower amount of unexplained errors when using YouTube/Soundcloud Links. **Increased error verbosity** for YouTube/Soundcloud Explode. Removed timeout settings to opt for built in *Explode timeout.
+  - Improvement: **Configurable Item json recipes** added for Remote Control & Skald's Girdle
+  -  Change: **Relative path lookup** now begins from OdinOnDemand plugin folder, no prefix needed.
+ - Refactor: Abstraction, Organization
+ - Fixed: Missing Remote Icon
+
+## 0.9.96-beta
+ - Fixed master volume fluctuations caused by incorrect mixer in Radio prefab audioSource
+
+## 0.9.95-beta
+ - New feature: In-Game Music Audio Crossfade based on distance [See config file]
+ - New feature: Configurable vertical volume drop-off [See Mediaplayer Settings Panel]
+ - Fixed missing meshes (How long was it like this?)
+ - Combined & Condensed Shaders
+ - Increased default YTExpolode Timeout
+
+## 0.9.94-beta
+ - Hopefully fixed issues with new updates
+
+## 0.9.93-beta
+ - Fixed local file unpause for real this time
+
+## 0.9.92-beta
+ - Fixed relative/local path file unpause and playback issues
+
+## 0.9.91-beta
+ - Config reorganized, now divided by categories.
+ - Piece recipe rework. Fixed file not saving, now auto-updates when certain recipes are missing. You can disable this in the config.
+
+## 0.9.90-beta
+ - Fixed issues stemming from Bepinex removing unstripped corlibs (thanks OrianaVenture)
+ - VIP System Beta. Very barebones, meant for feedback. Prevents non-VIP users from placing and interacting with Mediaplayers. Please check/wipe config for new settings.
+
+## 0.9.89-beta
+ - Fixed flow issue preventing remote recipe loading
+
+## 0.9.88-beta
+ - Fixed missing GetMyID method 
 
 ## 0.9.87-beta
  - Fixed relative path audio file playback
