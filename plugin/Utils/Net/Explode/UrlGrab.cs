@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using BepInEx;
@@ -179,22 +180,34 @@ namespace OdinOnDemand.Utils.Net.Explode
         
         public string GetRelativeURL(string url)
         {
-            string relativeURL = "";
+            // Get the directory of the current assembly
+            string assemblyDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
 
-            if (url.Contains("local:\\\\"))
+            string relativeURL = url;
+
+            // Remove the "local:" prefix first
+            if (relativeURL.StartsWith("local:\\\\"))
             {
-                relativeURL = Path.Combine(Paths.PluginPath, url).Replace("local:\\\\", "");
+                relativeURL = relativeURL.Substring("local:\\\\".Length);
             }
-            else if (url.Contains("local://"))
+            else if (relativeURL.StartsWith("local://"))
             {
-                relativeURL = Path.Combine(Paths.PluginPath, url).Replace("local://", "");
+                relativeURL = relativeURL.Substring("local://".Length);
             }
 
-            if (File.Exists(relativeURL))
+            // Combine the assembly directory with the relative path
+            string fullPath = Path.Combine(assemblyDirectory, relativeURL);
+
+            // Normalize the path
+            fullPath = Path.GetFullPath(fullPath);
+
+            if (File.Exists(fullPath))
             {
-                return relativeURL;
+                Jotunn.Logger.LogDebug($"Relative file found: {fullPath}");
+                return fullPath;
             }
 
+            Jotunn.Logger.LogWarning($"Relative file does not exist: {fullPath}");
             return "";
         }
         
