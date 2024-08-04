@@ -240,6 +240,9 @@ namespace OdinOnDemand.MPlayer
 
         public void SetURL(string url)
         {
+            System.Text.Encoding encoding = System.Text.Encoding.UTF8;
+            byte[] bytes = encoding.GetBytes(url);
+            url = encoding.GetString(bytes);
             UnparsedURL = url; //Save the unparsed url for later use
             mAudio.clip = null;
             if (UnparsedURL == "")
@@ -756,6 +759,9 @@ namespace OdinOnDemand.MPlayer
         public void RPC_SetURL(string url, bool isPaused = false, float time = 0f) // RPC SetURL
         {
             if (url == null) return;
+            System.Text.Encoding encoding = System.Text.Encoding.UTF8;
+            byte[] bytes = encoding.GetBytes(url);
+            url = encoding.GetString(bytes);
             PlayerSettings.IsPaused = isPaused;
             ClearRenderTexture(mScreen.targetTexture);
             //check if url is audio file
