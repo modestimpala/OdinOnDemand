@@ -802,6 +802,7 @@ namespace OdinOnDemand.MPlayer
                     mScreen.url = relativeURL;
                     PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.RelativeVideo;
                     if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + relativeURL);
+                    BeginLoadingPrepare();
                 }
                 else if (url.Contains("youtube.com/watch?v=") || url.Contains("youtube.com/shorts/") ||
                          url.Contains("youtu.be") && OODConfig.IsYtEnabled.Value)
