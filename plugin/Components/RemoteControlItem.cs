@@ -97,6 +97,13 @@ namespace OdinOnDemand.Components
                     OODConfig.RemoteControlDistance.Value, BaseAI.m_solidRayMask)) return false;
 
             var basePlayerComponent = hit.transform.gameObject.GetComponentInParent<BasePlayer>();
+            
+            if (hit.transform.transform.name.Contains("ValheimVehicles_piecesContainer"))
+            {
+                
+                basePlayerComponent = hit.collider.transform.gameObject.GetComponentInParent<BasePlayer>();
+            }
+            
             if (basePlayerComponent != null)
             {
                 if (basePlayerComponent is MediaPlayerComponent || basePlayerComponent is ReceiverComponent)
