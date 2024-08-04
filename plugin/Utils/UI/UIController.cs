@@ -363,13 +363,13 @@ namespace OdinOnDemand.Utils.UI
                 URLPanelObj.transform,
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f),
-                new Vector2(120f, -24f),
+                new Vector2(115f, -24f),
                 GUIManager.Instance.AveriaSerifBold,
                 18,
                 GUIManager.Instance.ValheimOrange,
                 true,
                 Color.black,
-                42f,
+                48f,
                 40f,
                 false);
 
