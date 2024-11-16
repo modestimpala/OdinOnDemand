@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using OdinOnDemand.Components;
@@ -58,6 +59,7 @@ namespace OdinOnDemand.MPlayer
 
 // Networking and Data Handling
         public URLGrab URLGrab { get; set; }
+        public DLSharp Ytdl { get; set; }
         public RpcHandler RPC { get; set; }
         public ZNetView ZNetView { get; set; }
         private string YoutubeURLNode { get; set; } 
@@ -88,6 +90,9 @@ namespace OdinOnDemand.MPlayer
             InvokeRepeating(nameof(UpdateLoadingIndicator), 0.5f, 0.5f);
             InvokeRepeating(nameof(UpdateChecks), 1f, 1f);
             InvokeRepeating(nameof(SyncTime), OODConfig.SyncTime.Value + 30f, OODConfig.SyncTime.Value);
+            
+            Ytdl = gameObject.AddComponent<DLSharp>();
+            StartCoroutine(Ytdl.Setup());
             
             var zdo = ZNetView.GetZDO();
             if (ZNetScene.instance) //If we're freshly placed set some default data and flip bool
@@ -804,15 +809,16 @@ namespace OdinOnDemand.MPlayer
                     if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + relativeURL);
                     BeginLoadingPrepare();
                 }
-                else if (url.Contains("youtube.com/watch?v=") || url.Contains("youtube.com/shorts/") ||
-                         url.Contains("youtu.be") && OODConfig.IsYtEnabled.Value)
+                if ((url.StartsWith("http://") || url.StartsWith("https://")) && 
+                    !Path.HasExtension(url) && 
+                    OODConfig.IsYtEnabled.Value)
                 {
                     if (PlayerSettings.IsLooping && (!mScreen.isLooping || !mAudio.loop))
                     {
                         mScreen.isLooping = true;
                         mAudio.loop = true;
                     }
-
+    
                     PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Youtube;
                     PlayYoutube(url);
                 }
@@ -845,22 +851,30 @@ namespace OdinOnDemand.MPlayer
                 UIController.LoadingIndicatorObj.SetActive(true);
             }
 
-            StartCoroutine(URLGrab.GetYoutubeExplodeCoroutine(url, (resultUrl) =>
-            {
-                if (!string.IsNullOrEmpty(resultUrl))
+
+
+            StartCoroutine(Ytdl.GetVideoUrlWithRetry(
+                url: url,
+                onComplete: (resultUrl) =>
                 {
-                    mScreen.url = resultUrl;
-                    BeginLoadingPrepare();  
-                }
-                else
-                {
-                    // Handle error or null result.
-                    UIController.SetLoadingIndicatorText("Failed to load video");
-                    Logger.LogWarning("Failed to load video");
-                    // Optionally, reset the loading indicator after some time.
-                    StartCoroutine(ResetLoadingIndicatorAfterDelay());
-                }
-            }));
+                    if (!string.IsNullOrEmpty(resultUrl))
+                    {
+                        Jotunn.Logger.LogDebug("Result URL: " + resultUrl);
+                        mScreen.url = resultUrl;
+                        BeginLoadingPrepare();  
+                    }
+                    else
+                    {
+                        Jotunn.Logger.LogError("Failed to get video URL");
+                        UIController.SetLoadingIndicatorText("Failed to load video");
+                        Logger.LogWarning("Failed to load video");
+                        // Optionally, reset the loading indicator after some time.
+                        StartCoroutine(ResetLoadingIndicatorAfterDelay());
+                    }
+                },
+                maxRetries: 3,
+                timeoutSeconds: 120
+            ));
         }
         
         private IEnumerator ResetLoadingIndicatorAfterDelay()
