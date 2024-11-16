@@ -3,6 +3,7 @@ using AngleSharp.Text;
 using HarmonyLib;
 using OdinOnDemand.Utils;
 using OdinOnDemand.Utils.Config;
+using UnityEngine;
 
 namespace OdinOnDemand.Patches
 {
@@ -12,11 +13,14 @@ namespace OdinOnDemand.Patches
         
         [HarmonyPatch(typeof(Player), "PlacePiece", new Type[]
         {
-            typeof(Piece)
+            typeof(Piece),
+            typeof(Vector3),
+            typeof(Quaternion),
+            typeof(bool)
         })]
         private static class PlacePiece_Patch
         {
-            private static bool Prefix(Piece piece)
+            private static bool Prefix(Piece piece, Vector3 pos, Quaternion rot, bool doAttack = true)
             {
                 if (Pieces.Contains(piece.gameObject.name) && OODConfig.VipMode.Value)
                 {
