@@ -73,6 +73,15 @@ namespace OdinOnDemand.Utils.Net.Explode
             var urlString = url.AbsoluteUri;
             LoadingBool = true;
             var soundcloud = new SoundCloudClient();
+            // Start initialization
+            soundcloud.InitializeAsync();
+    
+            // Wait until initialization is complete
+            while (!soundcloud.IsInitialized)
+            {
+                yield return null;
+            }
+            
             var trackTask = Async.GetSoundCloudTrackAsync(soundcloud, urlString, Source.Token);
 
             // Wait for the task to complete.
