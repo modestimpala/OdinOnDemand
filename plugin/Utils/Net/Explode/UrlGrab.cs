@@ -216,7 +216,7 @@ namespace OdinOnDemand.Utils.Net.Explode
                 return fullPath;
             }
 
-            Jotunn.Logger.LogWarning($"Relative file does not exist: {fullPath}");
+            Jotunn.Logger.LogDebug($"Relative file does not exist: {fullPath}");
             return "";
         }
         
