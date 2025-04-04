@@ -35,7 +35,7 @@ namespace OdinOnDemand.Patches
 
             if (Pieces.Contains(piece.gameObject.name.Replace("(Clone)","")) && OODConfig.VipMode.Value)
             {
-                var rank = RankSystem.GetRank(Steamworks.SteamUser.GetSteamID().ToString());
+                var rank = RankSystem.GetRank();
                 //
                 if (rank != RankSystem.PlayerRank.Admin && rank != RankSystem.PlayerRank.Vip)
                 {

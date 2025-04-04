@@ -128,7 +128,7 @@ namespace OdinOnDemand.Components
             //TODO: control volume with no access
             if (OODConfig.VipMode.Value)
             {
-                var rank = RankSystem.GetRank(Steamworks.SteamUser.GetSteamID().ToString());
+                var rank = RankSystem.GetRank();
                 if (rank != RankSystem.PlayerRank.Admin && rank != RankSystem.PlayerRank.Vip)
                 {
                     return Localization.instance.Localize(mName + "\n$piece_noaccess");
@@ -157,7 +157,7 @@ namespace OdinOnDemand.Components
         {
             if (OODConfig.VipMode.Value)
             {
-                var rank = RankSystem.GetRank(Steamworks.SteamUser.GetSteamID().ToString());
+                var rank = RankSystem.GetRank();
                 if (rank != RankSystem.PlayerRank.Admin && rank != RankSystem.PlayerRank.Vip)
                 {
                     return false;
