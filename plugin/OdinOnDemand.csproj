@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <LangVersion>8</LangVersion>
@@ -66,6 +66,7 @@
         <Compile Include="Utils\Config\PieceConfigDTO.cs" />
         <Compile Include="Utils\Net\ComponentLists.cs" />
         <Compile Include="Utils\Net\Explode\Async.cs" />
+    <Compile Include="Utils\Net\Explode\DLSharp.cs" />
         <Compile Include="Utils\Net\Explode\UrlGrab.cs" />
         <Compile Include="Utils\Net\RpcHandler.cs" />
         <Compile Include="Utils\UI\AudioWaveformVisualizer.cs" />
@@ -73,15 +74,26 @@
         <Compile Include="Utils\UI\ScrollingText.cs" />
         <Compile Include="Utils\UI\UIController.cs" />
         <Compile Include="Properties\IgnoreAccessModifiers.cs" />
-        <Compile Include="Utils\ZNetExtensions.cs" />
         <Compile Include="OdinOnDemandPlugin.cs" />
         <Compile Include="Properties\AssemblyInfo.cs" />
-        <Compile Include="Utils\RpcHandler.cs" />
-    </ItemGroup>
+  </ItemGroup>
     <ItemGroup>
         <None Include="app.config" />
         <None Include="packages.config" />
     </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\videoplayers" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\default.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\README.md">
+      <Link>README.md</Link>
+    </Content>
+    <EmbeddedResource Include="Assets\default_items.json" />
+    <Content Include="publish.ps1" />
+  </ItemGroup>
     <ItemGroup>
         <Reference Include="0Harmony">
         </Reference>
@@ -371,32 +383,6 @@
         <Reference Include="YoutubeExplode">
         </Reference>
     </ItemGroup>
-    <ItemGroup>
-        <EmbeddedResource Include="Assets\videoplayers" />
-    </ItemGroup>
-    <ItemGroup>
-      <EmbeddedResource Include="Assets\default.json" />
-    </ItemGroup>
-    <ItemGroup>
-      <Content Include="..\README.md">
-        <Link>README.md</Link>
-      </Content>
-      <EmbeddedResource Include="Assets\dlls\AngleSharp.dll" />
-      <EmbeddedResource Include="Assets\dlls\Microsoft.Bcl.AsyncInterfaces.dll" />
-      <EmbeddedResource Include="Assets\dlls\Newtonsoft.Json.dll" />
-      <EmbeddedResource Include="Assets\dlls\SoundCloudExplode.dll" />
-      <EmbeddedResource Include="Assets\dlls\System.Buffers.dll" />
-      <EmbeddedResource Include="Assets\dlls\System.Memory.dll" />
-      <EmbeddedResource Include="Assets\dlls\System.Numerics.Vectors.dll" />
-      <EmbeddedResource Include="Assets\dlls\System.Runtime.CompilerServices.Unsafe.dll" />
-      <EmbeddedResource Include="Assets\dlls\System.Text.Encodings.Web.dll" />
-      <EmbeddedResource Include="Assets\dlls\System.Text.Json.dll" />
-      <EmbeddedResource Include="Assets\dlls\System.Threading.Tasks.Extensions.dll" />
-      <EmbeddedResource Include="Assets\dlls\System.ValueTuple.dll" />
-      <EmbeddedResource Include="Assets\dlls\YoutubeExplode.dll" />
-      <EmbeddedResource Include="Assets\default_items.json" />
-      <Content Include="publish.ps1" />
-    </ItemGroup>
     <PropertyGroup>
         <MOD_DEPLOYPATH Condition="!Exists('$(MOD_DEPLOYPATH)')">F:\SteamLibrary\steamapps\common\Valheim\BepInEx\plugins</MOD_DEPLOYPATH>
     </PropertyGroup>
@@ -414,10 +400,5 @@
         <PropertyGroup>
             <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them. For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
         </PropertyGroup>
-        <Error Condition="!Exists('..\packages\Costura.Fody.5.8.0-alpha0098\build\Costura.Fody.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Costura.Fody.5.8.0-alpha0098\build\Costura.Fody.props'))" />
-        <Error Condition="!Exists('..\packages\Costura.Fody.5.8.0-alpha0098\build\Costura.Fody.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Costura.Fody.5.8.0-alpha0098\build\Costura.Fody.targets'))" />
-        <Error Condition="!Exists('..\packages\Fody.6.7.0\build\Fody.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Fody.6.7.0\build\Fody.targets'))" />
     </Target>
-    <Import Project="..\packages\Costura.Fody.5.8.0-alpha0098\build\Costura.Fody.targets" Condition="Exists('..\packages\Costura.Fody.5.8.0-alpha0098\build\Costura.Fody.targets')" />
-    <Import Project="..\packages\Fody.6.7.0\build\Fody.targets" Condition="Exists('..\packages\Fody.6.7.0\build\Fody.targets')" />
 </Project>
