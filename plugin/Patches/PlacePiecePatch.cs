@@ -24,7 +24,7 @@ namespace OdinOnDemand.Patches
             {
                 if (Pieces.Contains(piece.gameObject.name) && OODConfig.VipMode.Value)
                 {
-                    var rank = RankSystem.GetRank(Steamworks.SteamUser.GetSteamID().ToString());
+                    var rank = RankSystem.GetRank();
                     //rank != RankSystem.PlayerRank.Admin &&
                     if (rank != RankSystem.PlayerRank.Admin && rank != RankSystem.PlayerRank.Vip)
                     {
