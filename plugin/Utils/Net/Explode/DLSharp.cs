@@ -18,6 +18,12 @@ namespace OdinOnDemand.Utils.Net.Explode
             GetUrl = true
         };
 
+        private OptionSet UpdateOptions { get; } = new OptionSet()
+        {
+            Update = true,
+            NoPostOverwrites = true
+        };
+
         private string _videoUrl = "";
         private readonly Progress<string> _output;
 
@@ -53,6 +59,15 @@ namespace OdinOnDemand.Utils.Net.Explode
                     {
                         YoutubeDLPath = YtDlpPath
                     };
+                    // Run update to ensure it's the latest version
+                    var updateOperation = Ytdl.RunWithOptions(
+                        "",
+                        UpdateOptions,
+                        ct: CancellationToken.None,
+                        progress: null,
+                        output: _output,
+                        showArgs: false
+                    );
                     setupComplete = true;
                     onComplete?.Invoke(true);
                     yield break;
@@ -66,6 +81,7 @@ namespace OdinOnDemand.Utils.Net.Explode
 
             Jotunn.Logger.LogInfo("yt-dlp.exe not found or invalid. Downloading...");
             var downloadOperation = YoutubeDLSharp.Utils.DownloadYtDlp();
+            
 
             while (!setupComplete && elapsedTime < timeoutSeconds)
             {
@@ -102,12 +118,11 @@ namespace OdinOnDemand.Utils.Net.Explode
             onComplete?.Invoke(true);
         }
 
-        // Rest of the class remains the same...
         public IEnumerator GetVideoUrl(string url, Action<string> onComplete, int timeoutSeconds = DefaultTimeoutSeconds)
         {
             if (Ytdl == null)
             {
-                Jotunn.Logger.LogError("Please call Setup() first");
+                Jotunn.Logger.LogError("GetVideoUrl called before Setup");
                 onComplete?.Invoke(string.Empty);
                 yield break;
             }
