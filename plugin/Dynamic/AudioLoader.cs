@@ -55,7 +55,7 @@ namespace OdinOnDemand.Dynamic
                 .Where(s => s.EndsWith(".ogg") || s.EndsWith(".wav") || s.EndsWith(".mp3") || s.EndsWith(".flac"));
 
             var titlePath = Path.Combine(folderPath, "title.txt");
-            if (File.Exists(titlePath))
+             if (File.Exists(titlePath))
             {
                 var radioStationName = File.ReadAllText(titlePath);
                 var trackList = new List<Track>();
@@ -86,6 +86,7 @@ namespace OdinOnDemand.Dynamic
                         Logger.LogError(www.error + "from " + www.url);
                     }
                 }
+                
                 Sprite sprite = null;
                 string[] imageExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".gif" };
                 foreach (var extension in imageExtensions)
@@ -93,11 +94,19 @@ namespace OdinOnDemand.Dynamic
                     var thumbnailPath = Path.Combine(folderPath, "thumbnail" + extension);
                     if (File.Exists(thumbnailPath))
                     {
-                        var bytes = File.ReadAllBytes(thumbnailPath);
-                        var texture = new Texture2D(2, 2);
-                        texture.LoadImage(bytes);
-                        sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
-                            new Vector2(0.5f, 0.5f));
+                        using var www = UnityWebRequestTexture.GetTexture("file://" + thumbnailPath);
+                        yield return www.SendWebRequest();
+
+                        if (www.result == UnityWebRequest.Result.Success)
+                        {
+                            var texture = DownloadHandlerTexture.GetContent(www);
+                            sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                                new Vector2(0.5f, 0.5f));
+                        }
+                        else
+                        {
+                            Logger.LogError(www.error + "from " + www.url);
+                        }
                         break;
                     }
                 }

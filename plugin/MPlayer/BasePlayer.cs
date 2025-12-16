@@ -231,9 +231,8 @@ namespace OdinOnDemand.MPlayer
                 }
             }
 
-            if (!mAudio.isPlaying && mAudio.time == 0f && !mAudio.loop)
+            if (!mAudio.isPlaying && (mAudio.clip == null || mAudio.time == 0f) && !mAudio.loop)
             {
-                //If the audio is not playing, and the time is 0, and it's not looping, then we're not playing anything
                 if (Animator != null) Animator.SetBool(PlayerSettings.Playing, false);
             }
 
@@ -269,7 +268,8 @@ namespace OdinOnDemand.MPlayer
                     }
                 }
                 mScreen.time = 0;
-                mAudio.time = 0;
+                if (mAudio.clip)
+                    mAudio.time = 0;
                 PlayerSettings.IsPaused = false;
                 PlayerSettings.IsPlaying = true;
                 RPC.SendData(0, CinemaPackage.RPCDataType.SetVideoUrl, PlayerSettings.PlayerType, MediaPlayerID, gameObject.transform.position, 0f, UnparsedURL, CinemaPackage.PlayerStatus.Playing);
@@ -524,6 +524,11 @@ namespace OdinOnDemand.MPlayer
             mAudio.spatialize = true;
             mAudio.spatializePostEffects = true;
             mAudio.volume = PlayerSettings.Volume;
+            if (mScreen != null)
+            {
+                mScreen.audioOutputMode = UnityEngine.Video.VideoAudioOutputMode.AudioSource;
+                mScreen.SetTargetAudioSource(0, mAudio);
+            }
         }
 
         protected void SetupRadioPanel()
@@ -602,7 +607,8 @@ namespace OdinOnDemand.MPlayer
             mScreen.url = "";
             mAudio.clip = null;
             mScreen.time = 0;
-            mAudio.time = 0;
+            if (mAudio.clip)
+                mAudio.time = 0;
             if (PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen)
             {
                 ScreenPlaneObj.SetActive(false);
@@ -804,6 +810,7 @@ namespace OdinOnDemand.MPlayer
 
                 if (relativeURL != "")
                 {
+                    mScreen.source = VideoSource.Url;
                     mScreen.url = relativeURL;
                     PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.RelativeVideo;
                     if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + relativeURL);
@@ -825,6 +832,7 @@ namespace OdinOnDemand.MPlayer
                 else
                 {
                     PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Video;
+                    mScreen.source = UnityEngine.Video.VideoSource.Url;  
                     mScreen.url = url;
                     BeginLoadingPrepare();
                     if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + url);
@@ -860,6 +868,7 @@ namespace OdinOnDemand.MPlayer
                     if (!string.IsNullOrEmpty(resultUrl))
                     {
                         Jotunn.Logger.LogDebug("Result URL: " + resultUrl);
+                        mScreen.source = VideoSource.Url;
                         mScreen.url = resultUrl;
                         BeginLoadingPrepare();  
                     }
@@ -987,6 +996,7 @@ namespace OdinOnDemand.MPlayer
                     }
                     
                     // play
+                    mScreen.source = VideoSource.Url; 
                     mScreen.url = YoutubeVideoDirectUri.AbsoluteUri;
                     mScreen.Prepare();
                     //m_screen.transform.Find("Plane").gameObject.SetActive(true);
@@ -1060,7 +1070,7 @@ namespace OdinOnDemand.MPlayer
             {
                 mScreen.time = time;
             }
-            if (Math.Abs(mAudio.time - time) > 0.05) // Threshold can be adjusted
+            if (mAudio.clip != null && Math.Abs(mAudio.time - time) > 0.05)
             {
                 mAudio.time = time;
             }
@@ -1111,8 +1121,10 @@ namespace OdinOnDemand.MPlayer
             var zdo = ZNetView.GetZDO();
             if (zdo != null)
             {
-                if (mScreen.isPlaying) zdo.Set("time", (float) mScreen.time);
-                if (mAudio.isPlaying) zdo.Set("time", mAudio.time);
+                if (mScreen.isPlaying) 
+                    zdo.Set("time", (float)mScreen.time);
+                else if (mAudio.isPlaying && mAudio.clip) 
+                    zdo.Set("time", mAudio.time);
             }
         }
 
@@ -1370,7 +1382,7 @@ namespace OdinOnDemand.MPlayer
             {
                 return (float)mScreen.time;
             }
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Audio)
+            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Audio && mAudio.clip)
             {
                 return mAudio.time;
             }

@@ -2,9 +2,11 @@
 using System.Collections;
 using System.Threading;
 using System.IO;
+using System.Text;
 using UnityEngine;
 using YoutubeDLSharp;
 using YoutubeDLSharp.Options;
+using Newtonsoft.Json.Linq;
 
 namespace OdinOnDemand.Utils.Net.Explode
 {
@@ -14,8 +16,8 @@ namespace OdinOnDemand.Utils.Net.Explode
         private YoutubeDL Ytdl { get; set; }
         private OptionSet Options { get; } = new OptionSet()
         {
-            Format = "best",
-            GetUrl = true
+            Format = "18/22/37/best[ext=mp4]",
+            DumpSingleJson = true
         };
 
         private OptionSet UpdateOptions { get; } = new OptionSet()
@@ -25,17 +27,21 @@ namespace OdinOnDemand.Utils.Net.Explode
         };
 
         private string _videoUrl = "";
+        private StringBuilder _jsonOutput;
         private readonly Progress<string> _output;
 
         private static readonly string YtDlpPath = Path.Combine(BepInEx.Paths.GameRootPath, "yt-dlp.exe");
 
         public DLSharp()
-        { ;
+        {
             _output = new Progress<string>(s =>
             {
-                if (s != null && s.StartsWith("http"))
+                if (s != null)
                 {
-                    _videoUrl = s.Trim();
+                    if (_jsonOutput != null)
+                    {
+                        _jsonOutput.AppendLine(s);
+                    }
                 }
             });
         }
@@ -45,12 +51,27 @@ namespace OdinOnDemand.Utils.Net.Explode
             return File.Exists(YtDlpPath);
         }
 
+        private string ExtractJsonFromOutput(string output)
+        {
+            if (string.IsNullOrEmpty(output))
+                return null;
+
+            int jsonStart = output.IndexOf('{');
+            int jsonEnd = output.LastIndexOf('}');
+
+            if (jsonStart >= 0 && jsonEnd > jsonStart)
+            {
+                return output.Substring(jsonStart, jsonEnd - jsonStart + 1);
+            }
+
+            return null;
+        }
+
         public IEnumerator Setup(Action<bool> onComplete = null, int timeoutSeconds = DefaultTimeoutSeconds)
         {
             float elapsedTime = 0;
             bool setupComplete = false;
 
-            // Check if yt-dlp exists first
             if (CheckYtDlpExists())
             {
                 try
@@ -59,7 +80,6 @@ namespace OdinOnDemand.Utils.Net.Explode
                     {
                         YoutubeDLPath = YtDlpPath
                     };
-                    // Run update to ensure it's the latest version
                     var updateOperation = Ytdl.RunWithOptions(
                         "",
                         UpdateOptions,
@@ -75,13 +95,11 @@ namespace OdinOnDemand.Utils.Net.Explode
                 catch (Exception ex)
                 {
                     Jotunn.Logger.LogError($"Setup failed with existing yt-dlp: {ex.Message}");
-                    // Continue to download attempt if setup with existing file fails
                 }
             }
 
             Jotunn.Logger.LogInfo("yt-dlp.exe not found or invalid. Downloading...");
             var downloadOperation = YoutubeDLSharp.Utils.DownloadYtDlp();
-            
 
             while (!setupComplete && elapsedTime < timeoutSeconds)
             {
@@ -128,7 +146,8 @@ namespace OdinOnDemand.Utils.Net.Explode
             }
 
             float elapsedTime = 0;
-            _videoUrl = ""; // Reset the URL before each request
+            _videoUrl = "";
+            _jsonOutput = new StringBuilder();
             bool operationComplete = false;
 
             var cts = new CancellationTokenSource();
@@ -156,9 +175,41 @@ namespace OdinOnDemand.Utils.Net.Explode
                         yield break;
                     }
 
-                    if (string.IsNullOrEmpty(_videoUrl))
+                    try
                     {
-                        Jotunn.Logger.LogError("No video URL was found in the output");
+                        var fullOutput = _jsonOutput.ToString();
+                        var jsonText = ExtractJsonFromOutput(fullOutput);
+                        
+                        if (string.IsNullOrEmpty(jsonText))
+                        {
+                            Jotunn.Logger.LogError("No JSON found in output");
+                            onComplete?.Invoke(string.Empty);
+                            yield break;
+                        }
+
+                        var json = JObject.Parse(jsonText);
+                        
+                        _videoUrl = json["url"]?.ToString();
+                        
+                        if (string.IsNullOrEmpty(_videoUrl))
+                        {
+                            var requestedFormats = json["requested_formats"];
+                            if (requestedFormats != null && requestedFormats.HasValues)
+                            {
+                                _videoUrl = requestedFormats[0]["url"]?.ToString();
+                            }
+                        }
+                        
+                        if (string.IsNullOrEmpty(_videoUrl))
+                        {
+                            Jotunn.Logger.LogError("No video URL found in JSON response");
+                            onComplete?.Invoke(string.Empty);
+                            yield break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Jotunn.Logger.LogError($"Failed to parse JSON output: {ex.Message}");
                         onComplete?.Invoke(string.Empty);
                         yield break;
                     }

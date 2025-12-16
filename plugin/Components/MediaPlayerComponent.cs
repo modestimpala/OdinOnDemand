@@ -149,6 +149,7 @@ namespace OdinOnDemand.Components
         {
             SetupCinemaScreen();
             
+            mScreen.source = UnityEngine.Video.VideoSource.Url;
             mScreen.url = "";
             mScreen.Pause();
         }

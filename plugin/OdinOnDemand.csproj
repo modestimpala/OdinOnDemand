@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <Import Project="packages\JotunnLib.2.27.0\build\JotunnLib.props" Condition="Exists('packages\JotunnLib.2.27.0\build\JotunnLib.props')" />
     <PropertyGroup>
-        <LangVersion>8</LangVersion>
+        <LangVersion>default</LangVersion>
     </PropertyGroup>
-    <Import Project="..\packages\Costura.Fody.5.8.0-alpha0098\build\Costura.Fody.props" Condition="Exists('..\packages\Costura.Fody.5.8.0-alpha0098\build\Costura.Fody.props')" />
-    <Import Project="..\packages\JotunnLib.2.10.0\build\JotunnLib.props" Condition="Exists('..\packages\JotunnLib.2.10.0\build\JotunnLib.props')" />
-    <Import Project="..\packages\Costura.Fody.5.0.2\build\Costura.Fody.props" Condition="Exists('..\packages\Costura.Fody.5.0.2\build\Costura.Fody.props')" />
     <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
     <PropertyGroup>
         <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -15,7 +13,7 @@
         <AppDesignerFolder>Properties</AppDesignerFolder>
         <RootNamespace>OdinOnDemand</RootNamespace>
         <AssemblyName>OdinOnDemand</AssemblyName>
-        <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
+        <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
         <FileAlignment>512</FileAlignment>
         <Deterministic>true</Deterministic>
         <NuGetPackageImportStamp>
@@ -73,9 +71,7 @@
         <Compile Include="Utils\UI\LoadingCircle.cs" />
         <Compile Include="Utils\UI\ScrollingText.cs" />
         <Compile Include="Utils\UI\UIController.cs" />
-        <Compile Include="Properties\IgnoreAccessModifiers.cs" />
         <Compile Include="OdinOnDemandPlugin.cs" />
-        <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
     <ItemGroup>
         <None Include="app.config" />
@@ -387,18 +383,15 @@
         <MOD_DEPLOYPATH Condition="!Exists('$(MOD_DEPLOYPATH)')">F:\SteamLibrary\steamapps\common\Valheim\BepInEx\plugins</MOD_DEPLOYPATH>
     </PropertyGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-    <Target Name="JotunnPostBuildTaskWin" Condition="'$(OS)' == 'Windows_NT'">
-        <Exec Command="powershell.exe -ExecutionPolicy RemoteSigned -File &quot;$(SolutionDir)publish.ps1&quot; -Target &quot;$(ConfigurationName)&quot; -TargetPath &quot;$(TargetDir.TrimEnd('\'))&quot; -TargetAssembly &quot;$(TargetFileName)&quot; -ValheimPath &quot;F:\SteamLibrary\steamapps\common\Valheim&quot; -DeployPath &quot;$(MOD_DEPLOYPATH.TrimEnd('\'))&quot; -ProjectPath &quot;$(ProjectDir.TrimEnd('\'))&quot; " />
-    </Target>
     <PropertyGroup>
         <BuildDependsOn>
             $(BuildDependsOn);
-            JotunnPostBuildTaskWin
         </BuildDependsOn>
     </PropertyGroup>
     <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
         <PropertyGroup>
             <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them. For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
         </PropertyGroup>
+        <Error Condition="!Exists('packages\JotunnLib.2.27.0\build\JotunnLib.props')" Text="$([System.String]::Format('$(ErrorText)', 'packages\JotunnLib.2.27.0\build\JotunnLib.props'))" />
     </Target>
 </Project>

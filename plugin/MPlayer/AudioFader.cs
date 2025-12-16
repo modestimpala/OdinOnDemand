@@ -40,7 +40,7 @@ namespace OdinOnDemand.Utils
         public void FadeGameMusic()
         {
             var (distance, closestMediaPlayer) = GetDistanceFromMediaplayers();
-            if (closestMediaPlayer == null)
+            if (!closestMediaPlayer)
             {
                 _musicMan.m_musicVolume = PlayerPrefs.GetFloat("MusicVolume", 1f);
                 return;
@@ -73,7 +73,7 @@ namespace OdinOnDemand.Utils
                 foreach (BasePlayer component in kvp.Value)
                 {
                     if(!component) continue;
-                    if (!component.mAudio.isPlaying && component.mAudio.time == 0f && !component.mAudio.loop)
+                    if (!component.mAudio.isPlaying && (!component.mAudio.clip || component.mAudio.time == 0f) && !component.mAudio.loop)
                     {
                         continue;
                     }
