@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <Import Project="Environment.props" Condition="Exists('Environment.props')" />
     <Import Project="packages\JotunnLib.2.27.0\build\JotunnLib.props" Condition="Exists('packages\JotunnLib.2.27.0\build\JotunnLib.props')" />
     <PropertyGroup>
         <LangVersion>default</LangVersion>
@@ -64,7 +65,7 @@
         <Compile Include="Utils\Config\PieceConfigDTO.cs" />
         <Compile Include="Utils\Net\ComponentLists.cs" />
         <Compile Include="Utils\Net\Explode\Async.cs" />
-    <Compile Include="Utils\Net\Explode\DLSharp.cs" />
+        <Compile Include="Utils\Net\Explode\DLSharp.cs" />
         <Compile Include="Utils\Net\Explode\UrlGrab.cs" />
         <Compile Include="Utils\Net\RpcHandler.cs" />
         <Compile Include="Utils\UI\AudioWaveformVisualizer.cs" />
@@ -72,96 +73,113 @@
         <Compile Include="Utils\UI\ScrollingText.cs" />
         <Compile Include="Utils\UI\UIController.cs" />
         <Compile Include="OdinOnDemandPlugin.cs" />
-  </ItemGroup>
+    </ItemGroup>
     <ItemGroup>
         <None Include="app.config" />
         <None Include="packages.config" />
     </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Assets\videoplayers" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Assets\default.json" />
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="..\README.md">
-      <Link>README.md</Link>
-    </Content>
-    <EmbeddedResource Include="Assets\default_items.json" />
-    <Content Include="publish.ps1" />
-  </ItemGroup>
+    <ItemGroup>
+        <EmbeddedResource Include="Assets\videoplayers" />
+    </ItemGroup>
+    <ItemGroup>
+        <EmbeddedResource Include="Assets\default.json" />
+    </ItemGroup>
+    <ItemGroup>
+        <Content Include="..\README.md">
+            <Link>README.md</Link>
+        </Content>
+        <EmbeddedResource Include="Assets\default_items.json" />
+        <Content Include="Environment.props" />
+        <Content Include="Environment.props.example" />
+        <Content Include="publish.ps1" />
+    </ItemGroup>
     <ItemGroup>
         <Reference Include="0Harmony">
-        </Reference>
-        <Reference Include="AngleSharp, Version=1.0.0.0, Culture=neutral, PublicKeyToken=e83494dcdc6d31ea, processorArchitecture=MSIL">
+            <HintPath>$(BEPINEX_CORE)\0Harmony.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="assembly_guiutils, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+            <HintPath>$(PUBLICIZED_ASSEMBLIES)\assembly_guiutils.dll</HintPath>
+            <Private>False</Private>
             <SpecificVersion>False</SpecificVersion>
         </Reference>
         <Reference Include="assembly_postprocessing">
+            <HintPath>$(PUBLICIZED_ASSEMBLIES)\assembly_postprocessing.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="assembly_simplemeshcombine">
-        </Reference>
-        <Reference Include="assembly_steamworks">
+            <HintPath>$(PUBLICIZED_ASSEMBLIES)\assembly_simplemeshcombine.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="assembly_utils, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
+            <HintPath>$(PUBLICIZED_ASSEMBLIES)\assembly_utils.dll</HintPath>
+            <Private>False</Private>
+            <SpecificVersion>False</SpecificVersion>
         </Reference>
         <Reference Include="assembly_valheim">
+            <HintPath>$(PUBLICIZED_ASSEMBLIES)\assembly_valheim.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="BepInEx">
+            <HintPath>$(BEPINEX_CORE)\BepInEx.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="BepInEx.Harmony">
+            <HintPath>$(BEPINEX_CORE)\BepInEx.Harmony.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="BepInEx.Preloader">
-        </Reference>
-        <Reference Include="Costura, Version=5.8.0.0, Culture=neutral, PublicKeyToken=9919ef960d84173d, processorArchitecture=MSIL">
+            <HintPath>$(BEPINEX_CORE)\BepInEx.Preloader.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="HarmonyXInterop">
+            <HintPath>$(BEPINEX_CORE)\HarmonyXInterop.dll</HintPath>
+            <Private>False</Private>
         </Reference>
-        <Reference Include="HtmlAgilityPack, Version=1.11.46.0, Culture=neutral, PublicKeyToken=bd319b19eaf3b43a, processorArchitecture=MSIL">
+        <Reference Include="Jotunn, Version=2.27.0.0, Culture=neutral, processorArchitecture=MSIL">
+            <HintPath>packages\JotunnLib.2.27.0\lib\net462\Jotunn.dll</HintPath>
         </Reference>
-        <Reference Include="Jotunn">
+        <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=10.0.0.1, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+          <HintPath>packages\Microsoft.Bcl.AsyncInterfaces.10.0.1\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
         </Reference>
-        <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=7.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-        </Reference>
+        <Reference Include="Microsoft.CSharp" />
         <Reference Include="Microsoft.Win32.Primitives, Version=4.0.2.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-            <Private>True</Private>
-            <Private>True</Private>
+            <HintPath>packages\Microsoft.Win32.Primitives.4.3.0\lib\net46\Microsoft.Win32.Primitives.dll</HintPath>
         </Reference>
         <Reference Include="mscorlib" />
-        <Reference Include="netstandard, Version=2.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51" />
-        <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+        <Reference Include="netstandard">
+            <HintPath>$(VALHEIM_MANAGED)\netstandard.dll</HintPath>
+            <Private>False</Private>
         </Reference>
-        <Reference Include="SoundCloudExplode, Version=1.4.1.0, Culture=neutral, processorArchitecture=MSIL">
+        <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+          <HintPath>$(BEPINEX_PLUGINS)\ValheimModding-JsonDotNET\Newtonsoft.Json.dll</HintPath>
+        </Reference>
+        <Reference Include="NewtonsoftJsonDetector">
+          <HintPath>$(BEPINEX_PLUGINS)\ValheimModding-JsonDotNET\NewtonsoftJsonDetector.dll</HintPath>
+        </Reference>
+        <Reference Include="SoundCloudExplode">
+          <HintPath>Lib\SoundCloudExplode.dll</HintPath>
+        </Reference>
+        <Reference Include="Splatform">
+            <HintPath>$(VALHEIM_MANAGED)\Splatform.dll</HintPath>
+        </Reference>
+        <Reference Include="Splatform.Steam">
+            <HintPath>$(VALHEIM_MANAGED)\Splatform.Steam.dll</HintPath>
         </Reference>
         <Reference Include="System" />
-        <Reference Include="System.AppContext, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-            <Private>True</Private>
-            <Private>True</Private>
-        </Reference>
-        <Reference Include="System.Buffers, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-        </Reference>
         <Reference Include="System.ComponentModel.Composition" />
         <Reference Include="System.Console, Version=4.0.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
             <Private>True</Private>
             <Private>True</Private>
         </Reference>
         <Reference Include="System.Core" />
-        <Reference Include="System.Diagnostics.DiagnosticSource, Version=4.0.1.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-        </Reference>
-        <Reference Include="System.Diagnostics.Tracing, Version=4.1.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-            <Private>True</Private>
-            <Private>True</Private>
-        </Reference>
+        <Reference Include="System.Data" />
+        <Reference Include="System.Data.DataSetExtensions" />
         <Reference Include="System.Globalization.Calendars, Version=4.0.2.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
             <Private>True</Private>
             <Private>True</Private>
         </Reference>
         <Reference Include="System.IO, Version=4.1.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-            <Private>True</Private>
-            <Private>True</Private>
-        </Reference>
-        <Reference Include="System.IO.Compression, Version=4.1.2.0, Culture=neutral, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL">
             <Private>True</Private>
             <Private>True</Private>
         </Reference>
@@ -178,16 +196,13 @@
             <Private>True</Private>
             <Private>True</Private>
         </Reference>
-        <Reference Include="System.Memory, Version=4.0.1.2, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-        </Reference>
-        <Reference Include="System.Net.Http, Version=4.1.1.3, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-        </Reference>
         <Reference Include="System.Net.Sockets, Version=4.1.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
             <Private>True</Private>
             <Private>True</Private>
         </Reference>
         <Reference Include="System.Numerics" />
-        <Reference Include="System.Numerics.Vectors, Version=4.1.4.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+        <Reference Include="System.Numerics.Vectors, Version=4.1.6.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+            <HintPath>packages\System.Numerics.Vectors.4.6.1\lib\net462\System.Numerics.Vectors.dll</HintPath>
         </Reference>
         <Reference Include="System.Reflection, Version=4.1.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
             <Private>True</Private>
@@ -197,7 +212,8 @@
             <Private>True</Private>
             <Private>True</Private>
         </Reference>
-        <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+        <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=6.0.3.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+            <HintPath>packages\System.Runtime.CompilerServices.Unsafe.6.1.2\lib\net462\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
         </Reference>
         <Reference Include="System.Runtime.Extensions, Version=4.1.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
             <Private>True</Private>
@@ -227,15 +243,11 @@
             <Private>True</Private>
             <Private>True</Private>
         </Reference>
-        <Reference Include="System.Text.Encoding.CodePages, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+        <Reference Include="System.Threading.Tasks.Extensions, Version=4.2.4.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+            <HintPath>packages\System.Threading.Tasks.Extensions.4.6.3\lib\net462\System.Threading.Tasks.Extensions.dll</HintPath>
         </Reference>
-        <Reference Include="System.Text.Encodings.Web, Version=7.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-        </Reference>
-        <Reference Include="System.Text.Json, Version=7.0.0.2, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-        </Reference>
-        <Reference Include="System.Threading.Tasks.Extensions, Version=4.2.0.1, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-        </Reference>
-        <Reference Include="System.ValueTuple, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+        <Reference Include="System.ValueTuple, Version=4.0.5.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+            <HintPath>packages\System.ValueTuple.4.6.1\lib\net462\System.ValueTuple.dll</HintPath>
         </Reference>
         <Reference Include="System.Web" />
         <Reference Include="System.Xml" />
@@ -245,143 +257,259 @@
             <Private>True</Private>
         </Reference>
         <Reference Include="UnityEngine">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.AccessibilityModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.AccessibilityModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.AIModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.AIModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.AndroidJNIModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.AndroidJNIModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.AnimationModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.AnimationModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.ARModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.ARModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.AssetBundleModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.AssetBundleModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.AudioModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.AudioModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.ClothModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.ClothModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.ClusterInputModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.ClusterInputModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.ClusterRendererModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.ClusterRendererModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.CoreModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.CoreModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.CrashReportingModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.CrashReportingModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.DirectorModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.DirectorModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.DSPGraphModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.DSPGraphModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.GameCenterModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.GameCenterModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.GIModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.GIModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.GridModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.GridModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.HotReloadModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.HotReloadModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.ImageConversionModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.ImageConversionModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.IMGUIModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.IMGUIModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.InputLegacyModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.InputLegacyModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.InputModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.InputModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.JSONSerializeModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.JSONSerializeModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.LocalizationModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.LocalizationModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.ParticleSystemModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.ParticleSystemModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.PerformanceReportingModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.PerformanceReportingModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.Physics2DModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.Physics2DModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.PhysicsModule">
-        </Reference>
-        <Reference Include="UnityEngine.ProfilerModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.PhysicsModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.RuntimeInitializeOnLoadManagerInitializerModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.RuntimeInitializeOnLoadManagerInitializerModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.ScreenCaptureModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.ScreenCaptureModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.SharedInternalsModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.SharedInternalsModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.SpriteMaskModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.SpriteMaskModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.SpriteShapeModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.SpriteShapeModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.StreamingModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.StreamingModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.SubstanceModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.SubstanceModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.SubsystemsModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.SubsystemsModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.TerrainModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.TerrainModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.TerrainPhysicsModule">
-        </Reference>
-        <Reference Include="UnityEngine.TextCoreModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.TerrainPhysicsModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.TextRenderingModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.TextRenderingModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.TilemapModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.TilemapModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.TLSModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.TLSModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UI">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UI.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UIElementsModule">
-        </Reference>
-        <Reference Include="UnityEngine.UIElementsNativeModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UIElementsModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UIModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UIModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UmbraModule">
-        </Reference>
-        <Reference Include="UnityEngine.UNETModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UmbraModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UnityAnalyticsModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UnityAnalyticsModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UnityConnectModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UnityConnectModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UnityCurlModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UnityCurlModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UnityTestProtocolModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UnityTestProtocolModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UnityWebRequestAssetBundleModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UnityWebRequestAssetBundleModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UnityWebRequestAudioModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UnityWebRequestModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UnityWebRequestModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UnityWebRequestTextureModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UnityWebRequestTextureModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.UnityWebRequestWWWModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.UnityWebRequestWWWModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.VehiclesModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.VehiclesModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.VFXModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.VFXModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.VideoModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.VideoModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.VirtualTexturingModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.VirtualTexturingModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.VRModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.VRModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.WindModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.WindModule.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine.XRModule">
+            <HintPath>$(VALHEIM_MANAGED)\UnityEngine.XRModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="YoutubeDLSharp, Version=1.1.2.25113, Culture=neutral, processorArchitecture=MSIL">
+          <HintPath>packages\YoutubeDLSharp.1.1.2\lib\net45\YoutubeDLSharp.dll</HintPath>
         </Reference>
         <Reference Include="YoutubeExplode">
+            <HintPath>Lib\YoutubeExplode.dll</HintPath>
         </Reference>
     </ItemGroup>
-    <PropertyGroup>
-        <MOD_DEPLOYPATH Condition="!Exists('$(MOD_DEPLOYPATH)')">F:\SteamLibrary\steamapps\common\Valheim\BepInEx\plugins</MOD_DEPLOYPATH>
-    </PropertyGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
     <PropertyGroup>
         <BuildDependsOn>

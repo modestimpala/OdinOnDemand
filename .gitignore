@@ -12,6 +12,7 @@
 packages/
 plugin/bin/
 plugin/obj
+plugin/.idea
 
 # Asset meta data should only be ignored when the corresponding asset is also ignored
 !/[Aa]ssets/**/*.meta
@@ -61,3 +62,4 @@ sysinfo.txt
 # Crashlytics generated file
 crashlytics-build.properties
 
+plugin/Environment.props

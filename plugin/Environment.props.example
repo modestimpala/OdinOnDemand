@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <!-- Valheim Game Install Path -->
+    <!-- Update this to your Steam Valheim installation folder -->
+    <VALHEIM_INSTALL>C:\Program Files (x86)\Steam\steamapps\common\Valheim</VALHEIM_INSTALL>
+    
+    <!-- Valheim Managed DLLs -->
+    <!-- Automatically derived from VALHEIM_INSTALL -->
+    <VALHEIM_MANAGED>$(VALHEIM_INSTALL)\Valheim_Data\Managed</VALHEIM_MANAGED>
+    
+    <!-- r2modman Profile Path -->
+    <!-- Update this to your r2modman profile path -->
+    <R2MODMAN_PROFILE>C:\Users\YourUsername\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\Default</R2MODMAN_PROFILE>
+    
+    <!-- BepInEx Paths -->
+    <!-- Automatically derived from R2MODMAN_PROFILE -->
+    <BEPINEX_CORE>$(R2MODMAN_PROFILE)\BepInEx\core</BEPINEX_CORE>
+    <BEPINEX_PLUGINS>$(R2MODMAN_PROFILE)\BepInEx\plugins</BEPINEX_PLUGINS>
+    
+    <!-- Publicized Assemblies -->
+    <!-- Update this to your AssemblyPublicizer output folder -->
+    <PUBLICIZED_ASSEMBLIES>C:\Path\To\Your\AssemblyPublicizer\publicized_assemblies</PUBLICIZED_ASSEMBLIES>
+    
+    <!-- Deployment Path -->
+    <!-- Where the built plugin should be deployed (optional) -->
+    <MOD_DEPLOYPATH Condition="'$(MOD_DEPLOYPATH)' == ''">F:\SteamLibrary\steamapps\common\Valheim\BepInEx\plugins</MOD_DEPLOYPATH>
+  </PropertyGroup>
+</Project>
+
