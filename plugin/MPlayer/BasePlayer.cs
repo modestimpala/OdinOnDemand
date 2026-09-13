@@ -41,8 +41,13 @@ namespace OdinOnDemand.MPlayer
         public string MediaPlayerID { get; set; }
         public string UnparsedURL { get; set; }
         public Uri DownloadURL { get; set; }
-        public Uri YoutubeSoundDirectUri { get; set; }
-        public Uri YoutubeVideoDirectUri { get; set; }
+        private YoutubeDecoder youtubeDecoder;
+        private int playbackGeneration;
+        private double pendingPlaybackTime;
+        private bool hasPendingPlaybackTime;
+        private bool youtubeBackendActive;
+        private bool youtubeLoading;
+        private bool legacyYoutubePlayback;
 
 // Playlist Management
         public int PlaylistPosition { get; set; }
@@ -62,7 +67,7 @@ namespace OdinOnDemand.MPlayer
         public DLSharp Ytdl { get; set; }
         public RpcHandler RPC { get; set; }
         public ZNetView ZNetView { get; set; }
-        private string YoutubeURLNode { get; set; } 
+
         
         // Speaker Management
         internal HashSet<SpeakerComponent> mSpeakers = new HashSet<SpeakerComponent>();
@@ -85,6 +90,7 @@ namespace OdinOnDemand.MPlayer
             //Screen events
             mScreen.prepareCompleted += ScreenPrepareCompleted;
             mScreen.loopPointReached += EndReached;
+            mScreen.errorReceived += ScreenErrorReceived;
             SetupAudio();
             // Repeating tasks
             InvokeRepeating(nameof(UpdateLoadingIndicator), 0.5f, 0.5f);
@@ -125,72 +131,376 @@ namespace OdinOnDemand.MPlayer
 
         public void OnDestroy()
         {
+            playbackGeneration++;
+            DestroyYoutubeBackend();
+            if (mScreen != null)
+            {
+                mScreen.prepareCompleted -= ScreenPrepareCompleted;
+                mScreen.loopPointReached -= EndReached;
+                mScreen.errorReceived -= ScreenErrorReceived;
+            }
             ComponentLists.RemoveComponent(GetType(), this);
         }
 
         private void EndReached(VideoPlayer source)
         {
-            if (PlayerSettings.IsPlayingPlaylist) //Playlist next video logic
+            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube && !legacyYoutubePlayback) return;
+            HandlePlaybackEnded();
+        }
+
+        private void YoutubeEnded()
+        {
+            if (!youtubeBackendActive) return;
+            HandlePlaybackEnded();
+        }
+
+        private void HandlePlaybackEnded()
+        {
+            if (PlayerSettings.IsPlayingPlaylist)
             {
-                if (PlaylistPosition < CurrentPlaylist.Count() - 1)
+                if (PlaylistPosition < CurrentPlaylist.Count - 1)
                 {
+                    SetLooping(false);
                     PlaylistPosition++;
-                    SetURL(CurrentPlaylist.ElementAt(PlaylistPosition).Url);
+                    SetURL(CurrentPlaylist[PlaylistPosition].Url);
+                    return;
                 }
-                else if (PlayerSettings.IsLooping)
+
+                if (PlayerSettings.IsLooping)
                 {
+                    SetLooping(false);
                     PlaylistPosition = 0;
-                    SetURL(CurrentPlaylist.ElementAt(PlaylistPosition).Url);
+                    SetURL(CurrentPlaylist[PlaylistPosition].Url);
+                    return;
                 }
             }
 
-            if (PlayerSettings.PlayerType ==
-                CinemaPackage.MediaPlayers.Radio) //If we're a radio and not looping stop playing animation
-                if (Animator && (!mScreen.isLooping || !mAudio.loop) && !PlayerSettings.IsPlayingPlaylist)
-                    Animator.SetBool(PlayerSettings.Playing, false);
+            if (IsPlaybackLooping())
+            {
+                PlayerSettings.IsPlaying = true;
+                PlayerSettings.IsPaused = false;
+                return;
+            }
 
-            var isPlaying = mScreen.isPlaying;
-            PlayerSettings.IsPlaying = isPlaying;
+            if (PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.Radio &&
+                Animator && !IsPlaybackLooping() && !PlayerSettings.IsPlayingPlaylist)
+            {
+                Animator.SetBool(PlayerSettings.Playing, false);
+            }
+
+            PlayerSettings.IsPlaying = IsPlaybackPlaying();
+            PlayerSettings.IsPaused = false;
         }
 
         private void ScreenPrepareCompleted(VideoPlayer source)
         {
-            //Set our screen plane to active
-            if (PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen)
-            {
-                if(ScreenPlaneObj) ScreenPlaneObj.SetActive(true);
-            }
-            
-            if(WaveParticleSystem && OODConfig.MobilePlayerVisuals.Value) WaveParticleSystem.Play();
-            
-            //Hide the loading indicators
+            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube && !legacyYoutubePlayback) return;
+            CompletePreparation();
+        }
+
+        private void YoutubePrepared()
+        {
+            if (!youtubeBackendActive || youtubeDecoder == null) return;
+            CompletePreparation();
+        }
+
+        private void CompletePreparation()
+        {
+            youtubeLoading = false;
+            if (PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen && ScreenPlaneObj)
+                ScreenPlaneObj.SetActive(true);
+
             if (UIController.LoadingIndicatorObj) UIController.LoadingIndicatorObj.SetActive(false);
             if (ScreenUICanvasObj && LoadingCircleObj)
             {
                 ScreenUICanvasObj.SetActive(false);
                 LoadingCircleObj.SetActive(false);
             }
-            
-            var zdotime = GetTimeZDO();
-            UpdatePlayerTime(zdotime);
-            
+
+            ApplyPendingPlaybackTime();
             StartCoroutine(DelayedExecution(0.5f, SendRequestTimeSync_RPC));
-            //Play the video
-            if(!PlayerSettings.IsPaused)
+
+            PlayerSettings.IsPlaying = true;
+            if (PlayerSettings.IsPaused)
             {
-                if (Animator) Animator.SetBool(PlayerSettings.Playing, true);
-                if(WaveParticleSystem && OODConfig.MobilePlayerVisuals.Value) WaveParticleSystem.Play();
-                PlayerSettings.IsPlaying = true;
-                PlayerSettings.IsPaused = false;
-                source.Play();
-                mAudio.Play();
+                PauseCurrentBackend();
+                if (Animator) Animator.SetBool(PlayerSettings.Playing, false);
+                if (WaveParticleSystem) WaveParticleSystem.Stop();
+                return;
+            }
+
+            PlayCurrentBackend();
+            if (Animator) Animator.SetBool(PlayerSettings.Playing, true);
+            if (WaveParticleSystem && OODConfig.MobilePlayerVisuals.Value) WaveParticleSystem.Play();
+        }
+
+        private void ScreenErrorReceived(VideoPlayer source, string message)
+        {
+            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube && !legacyYoutubePlayback) return;
+            HandlePlaybackError(message);
+        }
+
+        private void YoutubeError(string message)
+        {
+            if (!youtubeBackendActive) return;
+            HandlePlaybackError(message);
+            DestroyYoutubeBackend();
+        }
+
+        private void HandlePlaybackError(string message)
+        {
+            youtubeLoading = false;
+            Logger.LogError("Media playback failed: " + message);
+            PlayerSettings.IsPlaying = false;
+            PlayerSettings.IsPaused = false;
+            if (Animator) Animator.SetBool(PlayerSettings.Playing, false);
+            if (WaveParticleSystem) WaveParticleSystem.Stop();
+            if (ScreenUICanvasObj && LoadingCircleObj)
+            {
+                ScreenUICanvasObj.SetActive(false);
+                LoadingCircleObj.SetActive(false);
+            }
+            if (UIController.LoadingIndicatorObj)
+            {
+                UIController.SetLoadingIndicatorText("Failed to load media");
+                StartCoroutine(ResetLoadingIndicatorAfterDelay(playbackGeneration));
+            }
+        }
+
+        public double PlaybackTime
+        {
+            get
+            {
+                if (youtubeBackendActive && youtubeDecoder != null)
+                    return youtubeDecoder.Time;
+                if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube && !legacyYoutubePlayback)
+                    return hasPendingPlaybackTime ? pendingPlaybackTime : 0d;
+                if (IsVideoLink())
+                    return mScreen != null ? mScreen.time : 0d;
+                if (mAudio != null && mAudio.clip != null)
+                    return mAudio.time;
+                return hasPendingPlaybackTime ? pendingPlaybackTime : 0d;
+            }
+        }
+
+        public bool IsVideoPlaying => IsVideoLink() && IsPlaybackPlaying();
+
+        public void SetLooping(bool looping)
+        {
+            if (youtubeBackendActive && youtubeDecoder != null)
+            {
+                youtubeDecoder.IsLooping = looping && !PlayerSettings.IsPlayingPlaylist;
+                return;
+            }
+            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube && !legacyYoutubePlayback) return;
+
+            if (mScreen != null) mScreen.isLooping = looping && !PlayerSettings.IsPlayingPlaylist;
+            if (mAudio != null) mAudio.loop = looping;
+        }
+
+        private bool IsVideoLink()
+        {
+            return PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube ||
+                   PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.RelativeVideo ||
+                   PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Video;
+        }
+
+        private bool IsPlaybackPlaying()
+        {
+            if (youtubeBackendActive && youtubeDecoder != null)
+                return youtubeDecoder.IsPlaying;
+            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube && !legacyYoutubePlayback)
+                return false;
+            if (IsVideoLink())
+                return mScreen != null && mScreen.isPlaying;
+            return mAudio != null && mAudio.isPlaying;
+        }
+
+        private bool IsPlaybackPrepared()
+        {
+            if (youtubeBackendActive && youtubeDecoder != null)
+                return youtubeDecoder.IsPrepared;
+            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube && !legacyYoutubePlayback)
+                return false;
+            if (IsVideoLink())
+                return mScreen != null && mScreen.isPrepared;
+            return mAudio != null && mAudio.clip != null;
+        }
+
+        private bool IsPlaybackLooping()
+        {
+            if (youtubeBackendActive && youtubeDecoder != null)
+                return youtubeDecoder.IsLooping;
+            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube && !legacyYoutubePlayback)
+                return PlayerSettings.IsLooping;
+            if (IsVideoLink())
+                return mScreen != null && mScreen.isLooping;
+            return mAudio != null && mAudio.loop;
+        }
+
+        private void PlayCurrentBackend()
+        {
+            if (youtubeBackendActive && youtubeDecoder != null)
+            {
+                if (youtubeDecoder.IsPrepared) youtubeDecoder.Play();
+                return;
+            }
+            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube && !legacyYoutubePlayback)
+                return;
+
+            if (IsVideoLink())
+            {
+                if (mScreen != null) mScreen.Play();
+                return;
+            }
+
+            if (mAudio == null || mAudio.clip == null) return;
+            mAudio.UnPause();
+            if (!mAudio.isPlaying) mAudio.Play();
+        }
+
+        private void PauseCurrentBackend()
+        {
+            if (youtubeBackendActive && youtubeDecoder != null)
+            {
+                if (youtubeDecoder.IsPrepared) youtubeDecoder.Pause();
+                return;
+            }
+            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube && !legacyYoutubePlayback)
+                return;
+
+            if (IsVideoLink())
+            {
+                if (mScreen != null) mScreen.Pause();
+                return;
+            }
+
+            if (mAudio != null) mAudio.Pause();
+        }
+
+        private void ApplyPendingPlaybackTime()
+        {
+            if (!hasPendingPlaybackTime) return;
+            if (youtubeBackendActive && youtubeDecoder != null)
+            {
+                if (!youtubeDecoder.IsPrepared) return;
+                youtubeDecoder.Time = pendingPlaybackTime;
+            }
+            else if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube && !legacyYoutubePlayback)
+            {
+                return;
+            }
+            else if (IsVideoLink())
+            {
+                if (mScreen == null || !mScreen.isPrepared) return;
+                mScreen.time = pendingPlaybackTime;
+            }
+            else if (mAudio != null && mAudio.clip != null)
+            {
+                mAudio.time = Mathf.Clamp((float)pendingPlaybackTime, 0f, mAudio.clip.length);
             }
             else
             {
-                PlayerSettings.IsPlaying = true;
-                PlayerSettings.IsPaused = true;
-                source.Pause();
-                mAudio.Pause();
+                return;
+            }
+
+            hasPendingPlaybackTime = false;
+        }
+
+        private int BeginSourceSwitch(double initialTime)
+        {
+            playbackGeneration++;
+            DestroyYoutubeBackend();
+            legacyYoutubePlayback = OODConfig.UseLegacyYoutubePlayback.Value;
+            if (DynamicStationCoroutine != null)
+            {
+                StopCoroutine(DynamicStationCoroutine);
+                DynamicStationCoroutine = null;
+            }
+
+            if (mScreen != null)
+            {
+                mScreen.Stop();
+                mScreen.url = "";
+                mScreen.isLooping = false;
+                mScreen.audioOutputMode = VideoAudioOutputMode.AudioSource;
+                if (mAudio != null) mScreen.SetTargetAudioSource(0, mAudio);
+            }
+
+            if (mAudio != null)
+            {
+                mAudio.Stop();
+                mAudio.clip = null;
+                mAudio.loop = false;
+            }
+
+            pendingPlaybackTime = Math.Max(0d, initialTime);
+            hasPendingPlaybackTime = true;
+            return playbackGeneration;
+        }
+
+        private void DestroyYoutubeBackend()
+        {
+            youtubeLoading = false;
+            youtubeBackendActive = false;
+            if (youtubeDecoder == null) return;
+
+            youtubeDecoder.Prepared -= YoutubePrepared;
+            youtubeDecoder.Ended -= YoutubeEnded;
+            youtubeDecoder.Error -= YoutubeError;
+            youtubeDecoder.Stop();
+            youtubeDecoder.enabled = false;
+            Destroy(youtubeDecoder);
+            youtubeDecoder = null;
+        }
+
+        private void PrepareYoutubeBackend(string videoUrl, string audioUrl, int generation)
+        {
+            if (generation != playbackGeneration || PlayerSettings.PlayerLinkType != PlayerSettings.LinkType.Youtube)
+                return;
+
+            DestroyYoutubeBackend();
+            youtubeLoading = true;
+            if (mScreen != null)
+            {
+                mScreen.Stop();
+                mScreen.url = "";
+            }
+            if (mAudio != null)
+            {
+                mAudio.Stop();
+                mAudio.clip = null;
+                mAudio.loop = false;
+            }
+
+            if (legacyYoutubePlayback)
+            {
+                mScreen.source = VideoSource.Url;
+                mScreen.url = videoUrl;
+                SetLooping(PlayerSettings.IsLooping);
+                BeginLoadingPrepare();
+                return;
+            }
+
+            youtubeDecoder = gameObject.AddComponent<YoutubeDecoder>();
+            youtubeBackendActive = true;
+            youtubeDecoder.Prepared += YoutubePrepared;
+            youtubeDecoder.Ended += YoutubeEnded;
+            youtubeDecoder.Error += YoutubeError;
+            youtubeDecoder.IsLooping = PlayerSettings.IsLooping && !PlayerSettings.IsPlayingPlaylist;
+
+            try
+            {
+                youtubeDecoder.Prepare(
+                    videoUrl,
+                    audioUrl,
+                    mAudio,
+                    mScreen != null ? mScreen.targetTexture : null);
+            }
+            catch (Exception exception)
+            {
+                HandlePlaybackError(exception.Message);
+                DestroyYoutubeBackend();
             }
         }
 
@@ -231,7 +541,7 @@ namespace OdinOnDemand.MPlayer
                 }
             }
 
-            if (!mAudio.isPlaying && (mAudio.clip == null || mAudio.time == 0f) && !mAudio.loop)
+            if (!IsPlaybackPlaying() && !IsPlaybackLooping() && (!IsVideoLink() || !IsPlaybackPrepared()))
             {
                 if (Animator != null) Animator.SetBool(PlayerSettings.Playing, false);
             }
@@ -248,7 +558,6 @@ namespace OdinOnDemand.MPlayer
             byte[] bytes = encoding.GetBytes(url);
             url = encoding.GetString(bytes);
             UnparsedURL = url; //Save the unparsed url for later use
-            mAudio.clip = null;
             if (UnparsedURL == "")
             {
                 Stop(true);
@@ -267,9 +576,7 @@ namespace OdinOnDemand.MPlayer
                         return;
                     }
                 }
-                mScreen.time = 0;
-                if (mAudio.clip)
-                    mAudio.time = 0;
+                UpdatePlayerTime(0f);
                 PlayerSettings.IsPaused = false;
                 PlayerSettings.IsPlaying = true;
                 RPC.SendData(0, CinemaPackage.RPCDataType.SetVideoUrl, PlayerSettings.PlayerType, MediaPlayerID, gameObject.transform.position, 0f, UnparsedURL, CinemaPackage.PlayerStatus.Playing);
@@ -312,21 +619,21 @@ namespace OdinOnDemand.MPlayer
             }));
         }
         
-        public  void Play(bool isRPC = false) //Play the video (if paused)
+        public void Play(bool isRPC = false)
         {
-            if(PlayerSettings.CurrentMode == PlayerSettings.PlayerMode.Dynamic)
+            if (PlayerSettings.CurrentMode == PlayerSettings.PlayerMode.Dynamic && !isRPC)
             {
                 if (PlayerSettings.DynamicStation != null)
                 {
-                    RPC.SendData(0, CinemaPackage.RPCDataType.RequestStation, PlayerSettings.PlayerType, MediaPlayerID, gameObject.transform.position, 0, PlayerSettings.DynamicStation.Title);
+                    RPC.SendData(0, CinemaPackage.RPCDataType.RequestStation, PlayerSettings.PlayerType,
+                        MediaPlayerID, gameObject.transform.position, 0, PlayerSettings.DynamicStation.Title);
                 }
                 return;
             }
-            
-            //If not RPC, send play RPC command
+
             if (!isRPC)
             {
-                RPC.SendData(0,CinemaPackage.RPCDataType.Play, PlayerSettings.PlayerType, MediaPlayerID,
+                RPC.SendData(0, CinemaPackage.RPCDataType.Play, PlayerSettings.PlayerType, MediaPlayerID,
                     gameObject.transform.position, GetTime());
                 PlayerSettings.IsPlaying = true;
                 PlayerSettings.IsPaused = false;
@@ -334,49 +641,19 @@ namespace OdinOnDemand.MPlayer
                 return;
             }
 
-            //Enable screen plane object
-            if (PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen)
-            {
+            if (PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen && ScreenPlaneObj)
                 ScreenPlaneObj.SetActive(true);
-            }
 
-            // If link type is youtube or relative video, play just the screen
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube ||
-                PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.RelativeVideo ||
-                PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Video)
+            PlayCurrentBackend();
+            PlayerSettings.IsPlaying = true;
+            PlayerSettings.IsPaused = false;
+
+            if (Animator) Animator.SetBool(PlayerSettings.Playing, true);
+            if (WaveParticleSystem && OODConfig.MobilePlayerVisuals.Value &&
+                (IsPlaybackPlaying() || IsPlaybackPrepared()))
             {
-                mScreen.Play();
-                PlayerSettings.IsPlaying = mScreen.isPlaying;
-                PlayerSettings.IsPaused = mScreen.isPaused;
-
-                if (Animator) Animator.SetBool(PlayerSettings.Playing, true);
-                if (WaveParticleSystem && OODConfig.MobilePlayerVisuals.Value)
-                {
-                    if (mScreen.isPlaying || mScreen.isPrepared || mAudio.isPlaying)   
-                        WaveParticleSystem.Play();
-                }
-                //m_audio.Play();
+                WaveParticleSystem.Play();
             }
-            else if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Audio)
-            {
-                
-                if (Animator) Animator.SetBool(PlayerSettings.Playing, true);
-                if (WaveParticleSystem && OODConfig.MobilePlayerVisuals.Value) WaveParticleSystem.Play();
-                
-                if (PlayerSettings.IsPaused && mAudio.clip != null)
-                {
-                    mAudio.UnPause();
-                }
-                else
-                {
-                    mAudio.Play();
-                }
-
-                var isPlaying = mAudio.isPlaying;
-                PlayerSettings.IsPaused = !isPlaying;
-                PlayerSettings.IsPlaying = isPlaying;
-            }
-            
         }
 
         public void PlayStation(string stationName)
@@ -408,21 +685,29 @@ namespace OdinOnDemand.MPlayer
 
         private void InitiateDynamicStationPlayback()
         {
-            PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Audio;
             var clip = PlayerSettings.DynamicStation.Tracks[PlayerSettings.DynamicStation.CurrentTrackIndex];
+            BeginSourceSwitch(clip.CurrentTime);
+            PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Audio;
+            mAudio.loop = PlayerSettings.IsLooping;
             mAudio.clip = clip.AudioClip;
-            mAudio.time = clip.CurrentTime;
+            ApplyPendingPlaybackTime();
             foreach (var component in ComponentLists.MediaComponentLists)
             {
                 foreach (BasePlayer player in component.Value)
                 {
                     if (player == this || !player || player.PlayerSettings.DynamicStation == null) continue;
-                    if(player.PlayerSettings.CurrentMode == PlayerSettings.PlayerMode.Dynamic &&
-                       player.PlayerSettings.DynamicStation.Title == PlayerSettings.DynamicStation.Title &&
-                       player.PlayerSettings.IsPlaying && !player.PlayerSettings.IsPaused)   
+                    if (player.PlayerSettings.CurrentMode == PlayerSettings.PlayerMode.Dynamic &&
+                        player.PlayerSettings.DynamicStation.Title == PlayerSettings.DynamicStation.Title &&
+                        player.PlayerSettings.IsPlaying && !player.PlayerSettings.IsPaused)
                     {
+                        player.BeginSourceSwitch(clip.CurrentTime);
+                        player.PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Audio;
+                        player.mAudio.loop = player.PlayerSettings.IsLooping;
                         player.mAudio.clip = clip.AudioClip;
-                        player.mAudio.time = clip.CurrentTime; // sync nearby players
+                        player.ApplyPendingPlaybackTime();
+                        player.mAudio.Play();
+                        player.DynamicStationCoroutine = player.StartCoroutine(
+                            player.AudioEndEvent(clip.AudioClip.length - player.mAudio.time, player.PlayNextDynamicStationTrack));
                     }
                 }
             }
@@ -433,12 +718,10 @@ namespace OdinOnDemand.MPlayer
             PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Audio;
             PlayerSettings.CurrentMode = PlayerSettings.PlayerMode.Dynamic;
             UnparsedURL = PlayerSettings.DynamicStation.Title;
-            // Calculate the remaining time for the clip to finish and schedule the next track
             float remainingTime = clip.AudioClip.length - mAudio.time;
-            if(DynamicStationCoroutine != null) StopCoroutine(DynamicStationCoroutine);
             DynamicStationCoroutine = StartCoroutine(AudioEndEvent(remainingTime, PlayNextDynamicStationTrack));
-            if(WaveParticleSystem) WaveParticleSystem.Play();
-            if(Animator) Animator.SetBool(PlayerSettings.Playing, true);
+            if (WaveParticleSystem) WaveParticleSystem.Play();
+            if (Animator) Animator.SetBool(PlayerSettings.Playing, true);
             UpdateRadioPanel();
         }
 
@@ -447,9 +730,11 @@ namespace OdinOnDemand.MPlayer
             if (PlayerSettings.DynamicStation == null) return;
             mAudio.Stop();
             mAudio.clip = null;
-            mAudio.time = 0;
             StartCoroutine(DelayedExecution(0.35f, () =>
                 {
+                    if (PlayerSettings.CurrentMode != PlayerSettings.PlayerMode.Dynamic ||
+                        PlayerSettings.DynamicStation == null)
+                        return;
                     RPC.SendData(0, CinemaPackage.RPCDataType.RequestStation, PlayerSettings.PlayerType, MediaPlayerID,
                         gameObject.transform.position, 0, PlayerSettings.DynamicStation.Title);
                     StartCoroutine(DelayedExecution(2f, SendRequestTimeSync_RPC));
@@ -465,7 +750,7 @@ namespace OdinOnDemand.MPlayer
         
         public void UpdateRadioPanel()
         {
-            if (RadioPanelObj && UIController.RadioPanelThumbnail && mAudio.isPlaying)
+            if (RadioPanelObj && UIController.RadioPanelThumbnail && IsPlaybackPlaying())
             {
                 if(ScreenUICanvasObj) ScreenUICanvasObj.SetActive(true);
                 if(ScreenPlaneObj) ScreenPlaneObj.SetActive(true);
@@ -479,37 +764,33 @@ namespace OdinOnDemand.MPlayer
 
                     UIController.RadioPanelThumbnail.sprite = PlayerSettings.DynamicStation.Thumbnail != null ? PlayerSettings.DynamicStation.Thumbnail : null;
                 }
-                else if(mAudio.isPlaying && PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Audio)
+                else if (mAudio.isPlaying && !IsVideoLink())
                 {
                     RadioPanelObj.SetActive(true);
                     UIController.RadioPanelThumbnail.sprite = PlayerSettings.Thumbnail != null ? PlayerSettings.Thumbnail : null;
                 }
-                else if (PlayerSettings.PlayerLinkType != PlayerSettings.LinkType.Audio)
+                else if (IsVideoLink())
                 {
                     RadioPanelObj.SetActive(false);
                 }
             }
         }
 
-        public void Pause(bool isRPC = false) //Pause the video (if playing)
+        public void Pause(bool isRPC = false)
         {
-            //If not RPC, send pause RPC command
             if (!isRPC)
             {
-                RPC.SendData(0,CinemaPackage.RPCDataType.Pause, PlayerSettings.PlayerType, MediaPlayerID,
+                RPC.SendData(0, CinemaPackage.RPCDataType.Pause, PlayerSettings.PlayerType, MediaPlayerID,
                     gameObject.transform.position, GetTime());
                 PlayerSettings.IsPaused = true;
                 SaveZDO();
                 return;
             }
-            //If we're a radio, stop the animation
+
+            PlayerSettings.IsPaused = true;
+            PauseCurrentBackend();
             if (Animator) Animator.SetBool(PlayerSettings.Playing, false);
             if (WaveParticleSystem) WaveParticleSystem.Stop();
-            
-            //Pause the video and audio, set bools
-            mScreen.Pause();
-            mAudio.Pause();
-            PlayerSettings.IsPaused = true;
         }
 
         private void SetupAudio()
@@ -561,27 +842,25 @@ namespace OdinOnDemand.MPlayer
             }
         }
 
-        protected void UpdateLoadingIndicator() //update loading indicator, called every half second
+        protected void UpdateLoadingIndicator()
         {
-            if (URLGrab.LoadingBool  && !String.IsNullOrEmpty(UnparsedURL)) //if urlgrab is loading and not failed, update loading indicators 
+            if ((URLGrab.LoadingBool || youtubeLoading) && !String.IsNullOrEmpty(UnparsedURL))
             {
                 if (ScreenUICanvasObj && LoadingCircleObj && RadioPanelObj)
                 {
-                    ScreenUICanvasObj.SetActive(true); //Show the loading circle on screen
+                    ScreenUICanvasObj.SetActive(true);
                     RadioPanelObj.SetActive(false);
                     LoadingCircleObj.SetActive(true);
                 }
 
-                UIController?.SetLoadingIndicatorActive(true); //Show the loading indicator in the GUI
-
-                var loadingMessageIndex = PlayerSettings.LoadingCount % 4; // Cycle through the loading messages
+                UIController?.SetLoadingIndicatorActive(true);
+                var loadingMessageIndex = PlayerSettings.LoadingCount % 4;
                 if (UIController != null && UIController.LoadingIndicatorObj != null)
                     UIController.LoadingIndicatorObj.GetComponent<Text>().text =
                         UIController.LoadingMessages[loadingMessageIndex];
                 PlayerSettings.LoadingCount++;
             }
-            else if (!URLGrab.LoadingBool && UIController.LoadingIndicatorObj &&
-                     UIController.LoadingIndicatorObj.activeSelf)
+            else if (UIController.LoadingIndicatorObj && UIController.LoadingIndicatorObj.activeSelf)
             {
                 UIController.SetLoadingIndicatorActive(false);
             }
@@ -598,17 +877,9 @@ namespace OdinOnDemand.MPlayer
                 return;
             }
 
-            if(DynamicStationCoroutine != null) StopCoroutine(DynamicStationCoroutine);
             PlayerSettings.DynamicStation = null;
-            
-            //Stop the video and audio, hide indicators
-            mScreen.Stop();
-            mAudio.Stop();
-            mScreen.url = "";
-            mAudio.clip = null;
-            mScreen.time = 0;
-            if (mAudio.clip)
-                mAudio.time = 0;
+            BeginSourceSwitch(0d);
+            hasPendingPlaybackTime = false;
             if (PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen)
             {
                 ScreenPlaneObj.SetActive(false);
@@ -631,9 +902,6 @@ namespace OdinOnDemand.MPlayer
             ClearRenderTexture(mScreen.targetTexture);
             UnparsedURL = null;
             DownloadURL = null;
-            YoutubeURLNode = null;
-            YoutubeSoundDirectUri = null;
-            YoutubeVideoDirectUri = null;
             PlaylistURL = null;
             PlaylistString = null;
             PlaylistPosition = 0;
@@ -643,67 +911,60 @@ namespace OdinOnDemand.MPlayer
             SendUpdateZDO_RPC();
         }
 
-        protected IEnumerator AudioWebRequest(Uri url) // Pipes downloadhandler to audio clip and plays it
+        protected IEnumerator AudioWebRequest(Uri url, int generation)
         {
             var dh = new DownloadHandlerAudioClip(url, AudioType.MPEG)
             {
-                compressed = false // This needs to be false now or Unity crashes due to memory access violation, I think this causes the audio to decompress to PCM format instead of keeping in memory 
+                compressed = false
             };
-            //Jotunn.Logger.LogDebug("testing coroutine");
             using var wr = new UnityWebRequest(url, "GET", dh, null);
             yield return wr.SendWebRequest();
 
+            if (generation != playbackGeneration) yield break;
             if (wr.result == UnityWebRequest.Result.ProtocolError ||
                 wr.result == UnityWebRequest.Result.ConnectionError)
             {
                 Logger.LogError(wr.error);
+                yield break;
             }
-            else
-            {
-                mAudio.clip = dh.audioClip;
-                mScreen.url = "";
-                mScreen.Stop();
-                mAudio.Play();
-                StartCoroutine(DelayedExecution(0.5f, SendRequestTimeSync_RPC));
-                PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Audio;
-                PlayerSettings.IsPlaying = true;
-                PlayerSettings.IsPaused = false;
-                if (Animator) Animator.SetBool(PlayerSettings.Playing, true);
-                if (WaveParticleSystem && OODConfig.MobilePlayerVisuals.Value) WaveParticleSystem.Play();
-                if(ScreenUICanvasObj) ScreenUICanvasObj.SetActive(true);
-                UpdateRadioPanel();
-                UIController.ResetLoadingIndicator();
-            }
+
+            mAudio.clip = dh.audioClip;
+            ApplyPendingPlaybackTime();
+            if (!PlayerSettings.IsPaused) mAudio.Play();
+            StartCoroutine(DelayedExecution(0.5f, SendRequestTimeSync_RPC));
+            PlayerSettings.IsPlaying = true;
+            if (Animator) Animator.SetBool(PlayerSettings.Playing, !PlayerSettings.IsPaused);
+            if (WaveParticleSystem && OODConfig.MobilePlayerVisuals.Value && !PlayerSettings.IsPaused)
+                WaveParticleSystem.Play();
+            if (ScreenUICanvasObj) ScreenUICanvasObj.SetActive(true);
+            UpdateRadioPanel();
+            UIController.ResetLoadingIndicator();
         }
 
-        private IEnumerator CreateThumbnailFromURL(Uri url)
+        private IEnumerator CreateThumbnailFromURL(Uri url, int generation)
         {
-            var dh = new DownloadHandlerTexture(true); // true for non-readable texture
+            var dh = new DownloadHandlerTexture(true);
             using var wr = new UnityWebRequest(url, "GET", dh, null);
             yield return wr.SendWebRequest();
 
-            if (wr.result == UnityWebRequest.Result.ProtocolError || wr.result == UnityWebRequest.Result.ConnectionError)
+            if (generation != playbackGeneration) yield break;
+            if (wr.result == UnityWebRequest.Result.ProtocolError ||
+                wr.result == UnityWebRequest.Result.ConnectionError)
             {
                 Logger.LogError($"Error downloading image: {wr.error}");
+                yield break;
             }
-            else
-            {
-                // Create a sprite from the downloaded texture
-                Texture2D texture = DownloadHandlerTexture.GetContent(wr);
-                Rect rect = new Rect(0, 0, texture.width, texture.height);
-                Vector2 pivot = new Vector2(0.5f, 0.5f); // Center pivot
-                Sprite sprite = Sprite.Create(texture, rect, pivot);
-                
-                // Assign the sprite to PlayerSettings.Thumbnail
-                PlayerSettings.Thumbnail = sprite;
 
-                // Additional UI updates can be performed here if needed
-            }
+            Texture2D texture = DownloadHandlerTexture.GetContent(wr);
+            Rect rect = new Rect(0, 0, texture.width, texture.height);
+            Vector2 pivot = new Vector2(0.5f, 0.5f);
+            PlayerSettings.Thumbnail = Sprite.Create(texture, rect, pivot);
         }
 
         
-        public void PlaySoundcloud(string sentUrl, bool isRPC) // Soundcloud urlgrab and play
+        public void PlaySoundcloud(string sentUrl, bool isRPC)
         {
+            int generation = playbackGeneration;
             var url = URLGrab.CleanUrl(sentUrl);
             UIController.SetLoadingIndicatorText("Processing");
             UIController.SetLoadingIndicatorActive(true);
@@ -711,75 +972,75 @@ namespace OdinOnDemand.MPlayer
             {
                 StartCoroutine(URLGrab.GetSoundcloudExplodeCoroutine(url, (resultUrl, artworkUri) =>
                 {
+                    if (generation != playbackGeneration) return;
                     if (resultUrl != null)
                     {
                         if (artworkUri != null)
-                        {
-                            StartCoroutine(CreateThumbnailFromURL(artworkUri));
-                        }
+                            StartCoroutine(CreateThumbnailFromURL(artworkUri, generation));
                         else
-                        {
                             PlayerSettings.Thumbnail = null;
-                        }
-                        StartCoroutine(AudioWebRequest(resultUrl));
-                        
+                        StartCoroutine(AudioWebRequest(resultUrl, generation));
                     }
                     else
                     {
                         UIController.SetLoadingIndicatorText("Null, check logs");
                         Logger.LogWarning("Failed to load Soundcloud");
-                        StartCoroutine(ResetLoadingIndicatorAfterDelay());
+                        StartCoroutine(ResetLoadingIndicatorAfterDelay(generation));
                     }
                 }));
             }
             else
             {
-                var message = "Soundcloud Null"; 
                 Logger.LogInfo("Soundcloud Null, check for exceptions");
-
-                StartCoroutine(UIController.UnavailableIndicator(message));
+                StartCoroutine(UIController.UnavailableIndicator("Soundcloud Null"));
             }
         }
         
-        public void PlayYoutube(string url) // Youtube urlgrab and play
+        public void PlayYoutube(string url)
         {
-            if (URLGrab.LoadingBool) return;
-            if (OODConfig.IsYtEnabled.Value)
-            {
-                if (PlayerSettings.IsLooping)
-                {
-                    mScreen.isLooping = true;
-                    mAudio.loop = true;
-                }
-                
-                if (OODConfig.YoutubeAPI.Value == OODConfig.YouTubeAPI.YouTubeExplode)
-                {
-                    StartYoutubeProcessing(url);
-                }
-                else
-                {
-                    YoutubeURLNode = url;
-                    StartCoroutine(YoutubeNodeQuery()); // Youtube-dl nodejs //TODO update node code
-                }
-            }
-            else
-            {
-                StartCoroutine(UIController.UnavailableIndicator("YouTube disabled")); 
-            }
+            PlayYoutube(url, playbackGeneration);
         }
-        public void RPC_SetURL(string url, bool isPaused = false, float time = 0f) // RPC SetURL
+
+        private void PlayYoutube(string url, int generation)
+        {
+            if (URLGrab.LoadingBool || generation != playbackGeneration) return;
+            if (!OODConfig.IsYtEnabled.Value)
+            {
+                PlayerSettings.IsPlaying = false;
+                StartCoroutine(UIController.UnavailableIndicator("YouTube disabled"));
+                return;
+            }
+            youtubeLoading = true;
+
+            if (legacyYoutubePlayback || OODConfig.YoutubeAPI.Value == OODConfig.YouTubeAPI.YouTubeExplode)
+                StartYoutubeProcessing(url, generation);
+            else
+                StartCoroutine(YoutubeNodeQuery(url, generation));
+        }
+        public void RPC_SetURL(string url, bool isPaused = false, float time = 0f)
         {
             if (url == null) return;
             System.Text.Encoding encoding = System.Text.Encoding.UTF8;
             byte[] bytes = encoding.GetBytes(url);
             url = encoding.GetString(bytes);
+            if (string.IsNullOrEmpty(url))
+            {
+                Stop(true);
+                return;
+            }
+
+            UnparsedURL = url;
+            PlayerSettings.CurrentMode = PlayerSettings.PlayerMode.URL;
+            PlayerSettings.DynamicStation = null;
             PlayerSettings.IsPaused = isPaused;
+            PlayerSettings.IsPlaying = true;
+            URLGrab.Reset();
+            int generation = BeginSourceSwitch(time);
             ClearRenderTexture(mScreen.targetTexture);
-            //check if url is audio file
+
             if (URLGrab.IsAudioFile(url))
             {
                 var relativeURL = URLGrab.GetRelativeURL(url);
-
                 if (relativeURL != "")
                 {
                     url = relativeURL;
@@ -790,54 +1051,46 @@ namespace OdinOnDemand.MPlayer
                     PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Audio;
                 }
 
+                SetLooping(PlayerSettings.IsLooping);
                 DownloadURL = URLGrab.CleanUrl(url);
-                StartCoroutine(AudioWebRequest(DownloadURL));
+                StartCoroutine(AudioWebRequest(DownloadURL, generation));
                 return;
             }
 
-            // check if url is soundcloud
             if (url.Contains("soundcloud.com/"))
             {
                 PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Soundcloud;
+                SetLooping(PlayerSettings.IsLooping);
                 PlaySoundcloud(url, true);
                 return;
             }
-            
-            if (url.Contains("\\") || url.Contains(".") || url.Contains("/"))
-            {
-                //Relative paths for local files
-                var relativeURL = URLGrab.GetRelativeURL(url);
 
-                if (relativeURL != "")
-                {
-                    mScreen.source = VideoSource.Url;
-                    mScreen.url = relativeURL;
-                    PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.RelativeVideo;
-                    if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + relativeURL);
-                    BeginLoadingPrepare();
-                }
-                if ((url.StartsWith("http://") || url.StartsWith("https://")) && 
-                    !Path.HasExtension(url) && 
-                    OODConfig.IsYtEnabled.Value)
-                {
-                    if (PlayerSettings.IsLooping && (!mScreen.isLooping || !mAudio.loop))
-                    {
-                        mScreen.isLooping = true;
-                        mAudio.loop = true;
-                    }
-    
-                    PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Youtube;
-                    PlayYoutube(url);
-                }
-                else
-                {
-                    PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Video;
-                    mScreen.source = UnityEngine.Video.VideoSource.Url;  
-                    mScreen.url = url;
-                    BeginLoadingPrepare();
-                    if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + url);
-                }
+            var relativeVideoUrl = URLGrab.GetRelativeURL(url);
+            if (relativeVideoUrl != "")
+            {
+                PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.RelativeVideo;
+                SetLooping(PlayerSettings.IsLooping);
+                mScreen.source = VideoSource.Url;
+                mScreen.url = relativeVideoUrl;
+                if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + relativeVideoUrl);
+                BeginLoadingPrepare();
+                return;
             }
+
+            if ((url.StartsWith("http://") || url.StartsWith("https://")) &&
+                OODConfig.IsYtEnabled.Value && !Path.HasExtension(url))
+            {
+                PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Youtube;
+                PlayYoutube(url, generation);
+                return;
+            }
+
+            PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Video;
+            SetLooping(PlayerSettings.IsLooping);
+            mScreen.source = VideoSource.Url;
+            mScreen.url = url;
+            BeginLoadingPrepare();
+            if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + url);
         }
 
         private void BeginLoadingPrepare()
@@ -853,226 +1106,142 @@ namespace OdinOnDemand.MPlayer
         
         public void StartYoutubeProcessing(string url)
         {
+            StartYoutubeProcessing(url, playbackGeneration);
+        }
+
+        private void StartYoutubeProcessing(string url, int generation)
+        {
+            if (generation != playbackGeneration) return;
+            youtubeLoading = true;
             if (UIController.LoadingIndicatorObj)
             {
                 UIController.SetLoadingIndicatorText("Processing");
                 UIController.LoadingIndicatorObj.SetActive(true);
             }
+            if (ScreenUICanvasObj && LoadingCircleObj)
+            {
+                ScreenUICanvasObj.SetActive(true);
+                LoadingCircleObj.SetActive(true);
+            }
 
-
-
-            StartCoroutine(Ytdl.GetVideoUrlWithRetry(
-                url: url,
-                onComplete: (resultUrl) =>
+            StartCoroutine(Ytdl.GetStreamsWithRetry(
+                url,
+                streams =>
                 {
-                    if (!string.IsNullOrEmpty(resultUrl))
+                    if (generation != playbackGeneration) return;
+                    if (streams != null && !string.IsNullOrEmpty(streams.VideoUrl))
                     {
-                        Jotunn.Logger.LogDebug("Result URL: " + resultUrl);
-                        mScreen.source = VideoSource.Url;
-                        mScreen.url = resultUrl;
-                        BeginLoadingPrepare();  
+                        PrepareYoutubeBackend(streams.VideoUrl, streams.AudioUrl, generation);
+                        return;
                     }
-                    else
-                    {
-                        Jotunn.Logger.LogError("Failed to get video URL");
-                        UIController.SetLoadingIndicatorText("Failed to load video");
-                        Logger.LogWarning("Failed to load video");
-                        // Optionally, reset the loading indicator after some time.
-                        StartCoroutine(ResetLoadingIndicatorAfterDelay());
-                    }
+
+                    HandlePlaybackError("Failed to get YouTube streams");
                 },
-                maxRetries: 3,
-                timeoutSeconds: 120
-            ));
+                3,
+                120,
+                legacyYoutubePlayback));
         }
         
-        private IEnumerator ResetLoadingIndicatorAfterDelay()
+        private IEnumerator ResetLoadingIndicatorAfterDelay(int generation)
         {
             yield return new WaitForSeconds(1.75f);
+            if (generation != playbackGeneration) yield break;
             UIController.ResetLoadingIndicator();
         }
 
-        private IEnumerator YoutubeNodeQuery(bool isRPC = false)
+        private IEnumerator YoutubeNodeQuery(string youtubeUrl, int generation)
         {
-            if (YoutubeURLNode == null)
-            {
-                Logger.LogDebug("nodejs: error in yt query, youtube url null. are you sure you want use nodejs?");
-                yield break;
-            }
+            if (string.IsNullOrEmpty(youtubeUrl)) yield break;
+            youtubeLoading = true;
 
-            //clean url
-            var url = Uri.EscapeDataString(YoutubeURLNode);
-
-            var nodeUrl = OODConfig.NodeUrl.Value;
-            var authCode = OODConfig.YtAuthCode.Value;
-            //begin query
-            var www = UnityWebRequest.Get(nodeUrl + url + "/" + authCode);
-            //Jotunn.Logger.LogDebug("url at: " + nodeUrl + url + "/" + authCode);
+            var url = Uri.EscapeDataString(youtubeUrl);
+            using var www = UnityWebRequest.Get(OODConfig.NodeUrl.Value + url + "/" + OODConfig.YtAuthCode.Value);
             www.timeout = 30;
             UIController.SetLoadingIndicatorText("Processing");
-            UIController.LoadingIndicatorObj.SetActive(true);
-
+            if (UIController.LoadingIndicatorObj) UIController.LoadingIndicatorObj.SetActive(true);
+            if (ScreenUICanvasObj && LoadingCircleObj)
+            {
+                ScreenUICanvasObj.SetActive(true);
+                LoadingCircleObj.SetActive(true);
+            }
 
             yield return www.SendWebRequest();
+            if (generation != playbackGeneration) yield break;
+
             if (www.result != UnityWebRequest.Result.Success)
             {
-                Debug.Log(www.error);
-                UIController.LoadingIndicatorObj.GetComponent<Text>().text = www.error;
-                yield return new WaitForSeconds(2);
-                UIController.LoadingIndicatorObj.SetActive(false);
-            }
-            else if (www.downloadHandler.text.Contains("AUTH DENIED"))
-            {
-                UIController.SetLoadingIndicatorText("Invalid Auth");
-                yield return new WaitForSeconds(2);
-                UIController.LoadingIndicatorObj.SetActive(false);
-            }
-            else
-            {
-                /*
-                * this feels really messy but yt-dlp returns either seperate audio/video files or one single merged file depending on codec availability
-                * maybe just remove node-js completely, but i like having the backup if needed.
-                * the unfortunate thing about hacky api's like youtubeexplode is they break eventually, youtue-dlp has always been consistent in my experience 
-                * nodejs server is set up to hopefully only return the merged file, but just in case it returns the split files we need to deal with that too
-                */
-                if (www.downloadHandler.text.Contains("\\"))
-                {
-                    // split files, seperate into different strings
-                    var lines = www.downloadHandler.text.Split(
-                        new[] { "\r\n", "\r", "\n", "\\n" },
-                        StringSplitOptions.None
-                    );
-
-                    for (var i = 0; i < lines.Length; i++) //clean quotations from node return
-                        lines[i] = lines[i].Replace("\"", "");
-
-                    // clean uris
-
-                    if (Uri.TryCreate(lines[0], UriKind.Absolute, out var cleanVideoUri))
-                    {
-                        //Jotunn.Logger.LogDebug("Clean URI: " + cleanVideoUri.AbsoluteUri);
-                        YoutubeVideoDirectUri = cleanVideoUri;
-                    }
-                    else
-                    {
-                         Logger.LogError("Invalid URI: " + lines[0]);
-                        UIController.SetLoadingIndicatorText("Invalid URI");
-                        yield return new WaitForSeconds(2);
-                        UIController.LoadingIndicatorObj.SetActive(false);
-                    }
-
-
-                    if (Uri.TryCreate(lines[1], UriKind.Absolute, out var cleanSoundUri))
-                    {
-                        //Jotunn.Logger.LogDebug("Clean URI: " + cleanSoundUri.AbsoluteUri);
-                        YoutubeSoundDirectUri = cleanSoundUri;
-                    }
-                    else
-                    {
-                         Logger.LogError("Invalid URI: " + lines[1]);
-                        UIController.SetLoadingIndicatorText("Invalid URI");
-                        yield return new WaitForSeconds(2);
-                        UIController.LoadingIndicatorObj.SetActive(false);
-                    }
-
-                    // make audio clip and play video
-                    StartCoroutine(CreateYoutubeAudioAndPlay());
-                }
-                else
-                {
-                    //single file, clean url
-                    var cleanUrl = www.downloadHandler.text.Replace("\"", "");
-                    if (Uri.TryCreate(cleanUrl, UriKind.Absolute, out var cleanVideoUri))
-                    {
-                        //Jotunn.Logger.LogDebug("Clean URI: " + cleanVideoUri.AbsoluteUri);
-                        YoutubeVideoDirectUri = cleanVideoUri;
-                    }
-                    else
-                    {
-                       Logger.LogError("Invalid URI: " + cleanUrl);
-                        UIController.SetLoadingIndicatorText("Invalid URI");
-                        yield return new WaitForSeconds(2);
-                        UIController.LoadingIndicatorObj.SetActive(false);
-                    }
-                    
-                    // play
-                    mScreen.source = VideoSource.Url; 
-                    mScreen.url = YoutubeVideoDirectUri.AbsoluteUri;
-                    mScreen.Prepare();
-                    //m_screen.transform.Find("Plane").gameObject.SetActive(true);
-                    //m_screen.Play();
-                    if (ScreenUICanvasObj && LoadingCircleObj)
-                    {
-                        ScreenUICanvasObj.SetActive(true);
-                        LoadingCircleObj.SetActive(true);
-                    }
-
-                    UIController.LoadingIndicatorObj.SetActive(false);
-                }
-            }
-        }
-        
-        private IEnumerator CreateYoutubeAudioAndPlay() // node js server returns split audio/video files, this function makes an audio clip from the audio file and plays the video
-        {
-            if (YoutubeSoundDirectUri == null)
-            {
-                Logger.LogDebug("sound url is null, waiting");
-                yield return new WaitForSeconds(1);
-            }
-
-            if (YoutubeSoundDirectUri == null)
-            {
-                Logger.LogDebug("sound url is null still, exiting");
+                HandlePlaybackError("Node YouTube extraction failed: " + www.error);
                 yield break;
             }
 
-            var dh = new DownloadHandlerAudioClip(YoutubeSoundDirectUri, AudioType.UNKNOWN)
+            if (www.downloadHandler.text.Contains("AUTH DENIED"))
             {
-                compressed = true // This
-            };
-            using var wr = new UnityWebRequest(YoutubeSoundDirectUri, "GET", dh, null);
-            yield return wr.SendWebRequest();
-
-            if (wr.result == UnityWebRequest.Result.ProtocolError ||
-                wr.result == UnityWebRequest.Result.ConnectionError)
-            {
-                Logger.LogWarning(wr.error);
-                UIController.LoadingIndicatorObj.SetActive(false);
+                HandlePlaybackError("Node YouTube extraction authentication denied");
+                yield break;
             }
-            else
-            {
-                mAudio.clip = dh.audioClip;
-                
-                if (YoutubeVideoDirectUri != null)
-                {
-                    mScreen.url = YoutubeVideoDirectUri.AbsoluteUri;
-                    mScreen.Prepare();
-                    if (ScreenUICanvasObj && LoadingCircleObj)
-                    {
-                        ScreenUICanvasObj.SetActive(true);
-                        LoadingCircleObj.SetActive(true);
-                    }
 
-                    UIController.LoadingIndicatorObj.SetActive(false);
-                }
-                else
-                {
-                    Logger.LogDebug("nodejs: yt url is null. are you sure want to use nodejs?");
-                    UIController.LoadingIndicatorObj.SetActive(false);
-                }
+            var lines = www.downloadHandler.text
+                .Replace("\\n", "\n")
+                .Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim().Trim('"'))
+                .Where(line => !string.IsNullOrEmpty(line))
+                .ToArray();
+
+            if (lines.Length == 0 ||
+                !Uri.TryCreate(lines[0], UriKind.Absolute, out var videoUri))
+            {
+                HandlePlaybackError("Node YouTube extraction returned an invalid video URL");
+                yield break;
             }
+
+            string audioUrl = null;
+            if (lines.Length > 1)
+            {
+                if (!Uri.TryCreate(lines[1], UriKind.Absolute, out var audioUri))
+                {
+                    HandlePlaybackError("Node YouTube extraction returned an invalid audio URL");
+                    yield break;
+                }
+                audioUrl = audioUri.AbsoluteUri;
+            }
+
+            PrepareYoutubeBackend(videoUri.AbsoluteUri, audioUrl, generation);
         }
         
-        public  void UpdatePlayerTime(float time)
+        public void UpdatePlayerTime(float time)
         {
-            // Check to avoid constant seeking
-            if (Math.Abs(mScreen.time - time) > 0.05) // Threshold can be adjusted
+            pendingPlaybackTime = Math.Max(0d, time);
+            hasPendingPlaybackTime = true;
+
+            if (youtubeBackendActive)
             {
-                mScreen.time = time;
+                if (youtubeDecoder != null && youtubeDecoder.IsPrepared)
+                {
+                    if (youtubeDecoder.IsPaused || Math.Abs(youtubeDecoder.Time - pendingPlaybackTime) > 0.05d)
+                        youtubeDecoder.Time = pendingPlaybackTime;
+                    hasPendingPlaybackTime = false;
+                }
+                return;
             }
-            if (mAudio.clip != null && Math.Abs(mAudio.time - time) > 0.05)
+
+            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube && !legacyYoutubePlayback)
+                return;
+
+            if (IsVideoLink())
             {
-                mAudio.time = time;
+                if (mScreen != null && mScreen.isPrepared &&
+                    Math.Abs(mScreen.time - pendingPlaybackTime) > 0.05d)
+                {
+                    mScreen.time = pendingPlaybackTime;
+                    hasPendingPlaybackTime = false;
+                }
+                return;
+            }
+
+            if (mAudio != null && mAudio.clip != null)
+            {
+                mAudio.time = Mathf.Clamp((float)pendingPlaybackTime, 0f, mAudio.clip.length);
+                hasPendingPlaybackTime = false;
             }
         }
         
@@ -1120,12 +1289,7 @@ namespace OdinOnDemand.MPlayer
         {
             var zdo = ZNetView.GetZDO();
             if (zdo != null)
-            {
-                if (mScreen.isPlaying) 
-                    zdo.Set("time", (float)mScreen.time);
-                else if (mAudio.isPlaying && mAudio.clip) 
-                    zdo.Set("time", mAudio.time);
-            }
+                zdo.Set("time", (float)PlaybackTime);
         }
 
         public virtual void LoadZDO()
@@ -1139,8 +1303,7 @@ namespace OdinOnDemand.MPlayer
             UnparsedURL = zdo.GetString("url");
             //Logger.LogInfo("loaded url from zdo: " + UnparsedURL);
             PlayerSettings.IsLooping = zdo.GetBool("isLooping");
-            mAudio.loop = PlayerSettings.IsLooping;
-            mScreen.isLooping = PlayerSettings.IsLooping;
+            SetLooping(PlayerSettings.IsLooping);
             mSpeakers = SpeakerHelper.DecompressSpeakerList(zdo.GetByteArray("speakers"));
             UpdateSpeakerCenter();
             PlayerSettings.IsPlaying = zdo.GetBool("isPlaying");
@@ -1154,14 +1317,21 @@ namespace OdinOnDemand.MPlayer
                     StartCoroutine(DelayedExecution(1f, () =>
                     {
                         RPC.SendData(0, CinemaPackage.RPCDataType.RequestStation, PlayerSettings.PlayerType,
-                            MediaPlayerID, gameObject.transform.position, 0f, PlayerSettings.DynamicStation.Title);
+                            MediaPlayerID, gameObject.transform.position, GetTimeZDO(), PlayerSettings.DynamicStation.Title);
                     }));
                     StartCoroutine(DelayedExecution(2f, SendRequestTimeSync_RPC));
                 }
             }
-            else
+            else if (!string.IsNullOrEmpty(UnparsedURL))
             {
-                StartCoroutine(DelayedExecution(3f, () => { RPC_SetURL(UnparsedURL, PlayerSettings.IsPaused); }));
+                string loadedUrl = UnparsedURL;
+                bool loadedPaused = PlayerSettings.IsPaused;
+                float loadedTime = GetTimeZDO();
+                StartCoroutine(DelayedExecution(3f, () =>
+                {
+                    if (UnparsedURL == loadedUrl)
+                        RPC_SetURL(loadedUrl, loadedPaused, loadedTime);
+                }));
             }
         }
 
@@ -1169,37 +1339,67 @@ namespace OdinOnDemand.MPlayer
         {
             var zdo = ZNetView.GetZDO();
             if (zdo == null) return;
+
             PlayerSettings.AdminOnly = zdo.GetBool("adminOnly");
             var zdoFloat = zdo.GetFloat("distance");
             if (zdoFloat != 0f) mAudio.maxDistance = zdoFloat;
             PlayerSettings.IsLocked = zdo.GetBool("isLocked");
+
+            bool wasPaused = PlayerSettings.IsPaused;
+            bool zdoPaused = zdo.GetBool("isPaused");
+            bool zdoPlaying = zdo.GetBool("isPlaying");
+            float zdoTime = zdo.GetFloat("time");
+            string zdoUrl = zdo.GetString("url");
             PlayerSettings.IsLooping = zdo.GetBool("isLooping");
-            mAudio.loop = PlayerSettings.IsLooping;
-            mScreen.isLooping = PlayerSettings.IsLooping;
+            SetLooping(PlayerSettings.IsLooping);
             PlayerSettings.CurrentMode = (PlayerSettings.PlayerMode)zdo.GetInt("currentMode");
-            if (zdo.GetString("url") != UnparsedURL)
+
+            if (zdoUrl != (UnparsedURL ?? ""))
             {
-                if (String.IsNullOrEmpty(UnparsedURL))
+                if (string.IsNullOrEmpty(zdoUrl))
                 {
-                    if (PlayerSettings.CurrentMode == PlayerSettings.PlayerMode.Dynamic)
+                    Stop(true);
+                }
+                else if (PlayerSettings.CurrentMode == PlayerSettings.PlayerMode.Dynamic)
+                {
+                    UnparsedURL = zdoUrl;
+                    PlayerSettings.IsPaused = zdoPaused;
+                    PlayerSettings.IsPlaying = zdoPlaying;
+                    StartCoroutine(DelayedExecution(1f, () =>
                     {
-                        StartCoroutine(DelayedExecution(1f, () =>
-                        {
-                            PlayerSettings.DynamicStation = StationManager.Instance.GetStation(UnparsedURL);
-                            if (PlayerSettings.DynamicStation?.Title == null) return;
-                            RPC.SendData(0, CinemaPackage.RPCDataType.RequestStation, PlayerSettings.PlayerType,
-                                MediaPlayerID, gameObject.transform.position, 0f, PlayerSettings.DynamicStation.Title);
-                        }));
-                        StartCoroutine(DelayedExecution(2f, SendRequestTimeSync_RPC));
-                    }
-                    else
-                    {
-                        RPC_SetURL(UnparsedURL);
-                    }
+                        if (UnparsedURL != zdoUrl) return;
+                        PlayerSettings.DynamicStation = StationManager.Instance.GetStation(zdoUrl);
+                        if (PlayerSettings.DynamicStation?.Title == null) return;
+                        RPC.SendData(0, CinemaPackage.RPCDataType.RequestStation, PlayerSettings.PlayerType,
+                            MediaPlayerID, gameObject.transform.position, zdoTime,
+                            PlayerSettings.DynamicStation.Title);
+                    }));
+                    StartCoroutine(DelayedExecution(2f, SendRequestTimeSync_RPC));
                 }
                 else
                 {
-                    Stop(true);
+                    RPC_SetURL(zdoUrl, zdoPaused, zdoTime);
+                }
+            }
+            else
+            {
+                PlayerSettings.IsPlaying = zdoPlaying;
+                if (zdoPaused != wasPaused)
+                {
+                    PlayerSettings.IsPaused = zdoPaused;
+                    if (zdoPaused)
+                    {
+                        PauseCurrentBackend();
+                        if (Animator) Animator.SetBool(PlayerSettings.Playing, false);
+                        if (WaveParticleSystem) WaveParticleSystem.Stop();
+                    }
+                    else
+                    {
+                        PlayCurrentBackend();
+                        if (Animator) Animator.SetBool(PlayerSettings.Playing, true);
+                        if (WaveParticleSystem && OODConfig.MobilePlayerVisuals.Value)
+                            WaveParticleSystem.Play();
+                    }
                 }
             }
 
@@ -1207,12 +1407,6 @@ namespace OdinOnDemand.MPlayer
             {
                 mSpeakers = SpeakerHelper.DecompressSpeakerList(zdo.GetByteArray("speakers"));
                 UpdateSpeakerCenter();
-            }
-            mSpeakers = SpeakerHelper.DecompressSpeakerList(zdo.GetByteArray("speakers"));
-            UpdateSpeakerCenter();
-            if(zdo.GetBool("isPaused") != PlayerSettings.IsPaused)
-            {
-                Pause(true);
             }
         }
         
@@ -1238,10 +1432,8 @@ namespace OdinOnDemand.MPlayer
         
         private void SyncTime()
         {
-            if(mScreen.isPlaying || mAudio.isPlaying)
-            {
+            if (IsPlaybackPlaying())
                 BroadcastTime();
-            }
         }
 
         internal void SendRequestTimeSync_RPC()
@@ -1376,17 +1568,7 @@ namespace OdinOnDemand.MPlayer
 
         private float GetTime()
         {
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube ||
-                PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.RelativeVideo ||
-                PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Video)
-            {
-                return (float)mScreen.time;
-            }
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Audio && mAudio.clip)
-            {
-                return mAudio.time;
-            }
-            return 0f;
+            return (float)PlaybackTime;
         }
 
         private float GetTimeZDO()
@@ -1401,6 +1583,7 @@ namespace OdinOnDemand.MPlayer
         
         void ClearRenderTexture(RenderTexture renderTexture)
         {
+            if (renderTexture == null) return;
             // Create a 1x1 black texture
             Texture2D blackTexture = new Texture2D(1, 1);
             blackTexture.SetPixel(0, 0, Color.black);

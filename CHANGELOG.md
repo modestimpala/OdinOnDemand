@@ -3,6 +3,21 @@
 
 ### Versions:
 
+## Unreleased
+ - Added Linux build configuration, automatic build-local assembly publicization, and an explicit r2modman deployment target.
+ - Updated hover interfaces, remote-control equipment hashes, and the placement Harmony target for Valheim 1.0.
+ - Enabled Mono's required publicized-member access permission in Release as well as Debug.
+ - Switched YoutubeDLSharp to the custom fork and updated the custom YoutubeExplode build with upstream changes, excluding Deorcify.
+ - Kept Newtonsoft.Json shared with Valheim/JsonDotNET and included the extractor's separate System.Text.Json runtime dependencies.
+ - Added a persisted client-side **Use Nightly yt-dlp** checkbox to the media player's cog menu, enabling `--update-to nightly` for the local downloader.
+ - Replaced hard-coded YouTube format IDs with split-first H.264/AAC HTTPS selection using the default and embedded clients, with a muxed fallback.
+ - Added packaged Windows x64 LibVLC streaming playback for separate video/audio streams, including Proton, without downloading or remuxing whole media files.
+ - Routed decoded frames and PCM through the existing Unity outputs, fixing a native audio buffer over-read and accounting for timestamp rounding, Unity read-ahead, and DSP latency.
+ - Unified YouTube transport, loop/playlist transitions, pending seeks, and source replacement around the decoder clock; stale extraction results cannot restart a stopped player.
+ - Fixed RPC paused-state deserialization and applied transmitted positions to play/pause commands.
+ - Added an optional client-side **Use Legacy YouTube Playback** cog setting: local yt-dlp format 18 through Unity, applied on the next load, with no automatic backend fallback.
+ - Preserved SoundCloud/relative-audio artwork, gramophone end animation, synchronized station continuation timers, and direct extensionless URLs when YouTube extraction is disabled.
+
 ## 1.0.6
  - Fixed crash when attempting to listen to SoundCloud links
 

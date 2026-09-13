@@ -1,0 +1,56 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Compile-time copies only. Never deploy these assemblies to the game. -->
+  <ItemGroup>
+    <PublicizeAssembly Include="$(VALHEIM_MANAGED)/assembly_guiutils.dll;$(VALHEIM_MANAGED)/assembly_postprocessing.dll;$(VALHEIM_MANAGED)/assembly_simplemeshcombine.dll;$(VALHEIM_MANAGED)/assembly_utils.dll;$(VALHEIM_MANAGED)/assembly_valheim.dll;$(VALHEIM_MANAGED)/gui_framework.dll;$(VALHEIM_MANAGED)/SoftReferenceableAssets.dll" />
+  </ItemGroup>
+  <UsingTask TaskName="PublicizeGameAssemblies" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutputDirectory ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Reference Include="$(BEPINEX_CORE)/Mono.Cecil.dll" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="Mono.Cecil" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        Directory.CreateDirectory(OutputDirectory);
+        foreach (var source in Sources)
+        {
+            var input = source.GetMetadata("FullPath");
+            var output = Path.GetFullPath(Path.Combine(OutputDirectory, Path.GetFileName(input)));
+            if (string.Equals(input, output, System.StringComparison.OrdinalIgnoreCase))
+            {
+                Log.LogError("Publicized assemblies must not overwrite the game assemblies.");
+                return false;
+            }
+            using var resolver = new DefaultAssemblyResolver();
+            resolver.AddSearchDirectory(Path.GetDirectoryName(input));
+            using (var assembly = AssemblyDefinition.ReadAssembly(input, new ReaderParameters { AssemblyResolver = resolver }))
+            {
+                foreach (var type in assembly.MainModule.GetTypes())
+                {
+                    if (type.Name == "<Module>") continue;
+                    if (type.IsNested) type.IsNestedPublic = true;
+                    else type.IsPublic = true;
+                    foreach (var field in type.Fields) field.IsPublic = true;
+                    foreach (var method in type.Methods)
+                    {
+                        if (!method.IsStatic || !method.IsConstructor) method.IsPublic = true;
+                    }
+                }
+                var temporary = output + ".tmp";
+                assembly.Write(temporary);
+                if (File.Exists(output)) File.Delete(output);
+                File.Move(temporary, output);
+            }
+            Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "Publicized {0}", Path.GetFileName(input));
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="PublicizeAssemblies" BeforeTargets="PrepareForBuild;ImplicitlyExpandNETStandardFacades;ResolveAssemblyReferences"
+          Inputs="@(PublicizeAssembly);$(MSBuildAllProjects);$(BEPINEX_CORE)/Mono.Cecil.dll"
+          Outputs="@(PublicizeAssembly->'$(PUBLICIZED_ASSEMBLIES)/%(Filename)%(Extension)')">
+    <PublicizeGameAssemblies Sources="@(PublicizeAssembly)" OutputDirectory="$(PUBLICIZED_ASSEMBLIES)" />
+  </Target>
+</Project>

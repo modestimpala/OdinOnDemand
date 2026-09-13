@@ -59,6 +59,11 @@ namespace OdinOnDemand.Components
             return mName;
         }
 
+        public float GetHoverOffset()
+        {
+            return 0f;
+        }
+
         public string GetHoverText()
         {
             return Localization.instance.Localize(string.Concat(mName));

@@ -208,21 +208,21 @@ namespace OdinOnDemand.Components
 
         private void OnTriggerEnter(Collider other) //Show screen plane when player is in range
         {
-            if (mScreen.isPlaying && OODConfig.ScreenDisableOutOfRange.Value)
+            if (IsVideoPlaying && OODConfig.ScreenDisableOutOfRange.Value)
                 if (ScreenPlaneObj && other.gameObject.layer == 9)
                     ScreenPlaneObj.SetActive(true);
         }
 
         private void OnTriggerExit(Collider other) //Hide screen plane when player is out of range
         {
-            if (mScreen.isPlaying && OODConfig.ScreenDisableOutOfRange.Value)
+            if (IsVideoPlaying && OODConfig.ScreenDisableOutOfRange.Value)
                 if (ScreenPlaneObj && other.gameObject.layer == 9)
                     ScreenPlaneObj.SetActive(false);
         }
 
         private void OnTriggerStay(Collider other) //Show screen plane when player is in range
         {
-            if (mScreen.isPlaying && OODConfig.ScreenDisableOutOfRange.Value)
+            if (IsVideoPlaying && OODConfig.ScreenDisableOutOfRange.Value)
                 if (ScreenPlaneObj && other.gameObject.layer == 9)
                     ScreenPlaneObj.SetActive(true);
         }
@@ -230,6 +230,11 @@ namespace OdinOnDemand.Components
         public string GetHoverName()
         {
             return mName;
+        }
+
+        public float GetHoverOffset()
+        {
+            return 0f;
         }
 
         public string GetHoverText()

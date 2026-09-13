@@ -8,6 +8,7 @@ namespace OdinOnDemand.Components
 {
     internal class RemoteControlItem : MonoBehaviour
     {
+        private static readonly int RemoteControlHash = "remotecontrol".GetStableHashCode();
         private Camera cam;
         private Player localPlayer;
         private MediaPlayerComponent mp;
@@ -25,7 +26,7 @@ namespace OdinOnDemand.Components
             if (!localPlayer || ZInput.instance == null) return;
             
             if (KeyConfig.UseRemoteButton == null || MessageHud.instance == null ||
-                Player.m_localPlayer == null || Player.m_localPlayer.m_visEquipment.m_rightItem != "remotecontrol" ||
+                Player.m_localPlayer == null || Player.m_localPlayer.m_visEquipment.m_rightItem != RemoteControlHash ||
                 !transform.parent.name.Contains("RightHand")) return;
             
             if (transform.GetComponentInParent<Player>().GetPlayerID() != localPlayer.GetPlayerID()) return;

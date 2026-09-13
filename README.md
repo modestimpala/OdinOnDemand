@@ -55,7 +55,70 @@ Please report any other issues on the [Nexus](https://www.nexusmods.com/valheim/
 Installation of the plugin is fairly straightforward, just install into Bepinex/plugins or use r2modman. **It must be installed on both server and client.**
 
 ## Building
-To build the project, Nuget restore. Then fix any dependencies in the .csproj file - make sure to use publicized dlls. We use a custom build of YoutubeExplode. You can either grab YoutubeExplode from a package repository or build it yourself. If you grab it from the repository you may experience issues in-game due to the package creators "Deorcify" package, which is why we use a custom build - to remove this package. Simply remove the Deorcify dependency from it's source code and build the dll, copy it over to packages folder and set the hint path. 
+
+The plugin targets .NET Framework 4.8 and can be built on Linux with the .NET SDK, Mono's reference assemblies, and NuGet. On Arch Linux, the tooling packages are `dotnet-sdk`, `dotnet-runtime`, `dotnet-targeting-pack`, `mono`, and `nuget`. Rebuilding the current YoutubeExplode fork requires SDK 10 (C# 14), even though its output targets `netstandard2.0` for Unity.
+
+1. Create a Valheim development profile in r2modman with BepInExPack_Valheim, Jotunn, and ValheimModding-JsonDotNET. Verify the profile launches before adding OdinOnDemand.
+2. Copy `plugin/Environment.props.example` to `plugin/Environment.props` and set the game and profile paths. On Linux the managed directory is case-sensitive: this installation uses `valheim_Data/Managed`.
+3. Restore and build from the repository root:
+
+   ```sh
+   nuget restore plugin/packages.config -PackagesDirectory plugin/packages
+   dotnet build plugin/OdinOnDemand.csproj --no-restore -c Release
+   ```
+
+The build automatically uses Mono's `/usr/lib/mono/4.8-api` reference assemblies when present. It uses the profile's BepInEx, Jotunn, and JsonDotNET DLLs and creates compile-time publicized game assemblies under `plugin/obj/publicized_assemblies`. No game files are changed.
+
+Both build configurations enable `AllowUnsafeBlocks`, which emits the permission Mono needs for access to publicized members. Publicizing the reference DLLs alone is not sufficient at runtime.
+
+To deploy to the `MOD_DEPLOYPATH` configured in `Environment.props`:
+
+```sh
+dotnet msbuild plugin/OdinOnDemand.csproj -t:Deploy -p:Configuration=Release
+```
+
+Exit the game before redeploying, then launch the same profile modded. Deployment includes the plugin and its private runtime dependencies, not Unity, BepInEx, Jotunn, Newtonsoft.Json, or publicized game assemblies. Valheim may load its own Newtonsoft.Json before JsonDotNET; use that shared assembly rather than shipping another copy. A plugin DLL's `app.config` does not control the game's assembly binding.
+
+### Custom media libraries
+
+Keep the custom DLLs in `plugin/Lib`; do not replace them with the public YoutubeExplode or YoutubeDLSharp NuGet packages.
+
+- `YoutubeDLSharp.dll`: [modestimpala/YoutubeDLSharp](https://github.com/modestimpala/YoutubeDLSharp), commit `b2f7968a2ef06a9c7b2c212785cfeac0b187b6d8`, built for `net45` with assembly version `1.1.1.0`. It uses Newtonsoft.Json 13.0.3, supplied at runtime by Valheim/JsonDotNET.
+- `YoutubeExplode.dll`: [modestimpala/YoutubeExplode](https://github.com/modestimpala/YoutubeExplode), fork commit `0b5cc1ec2a1fbe885195ef344c15844ff386aeeb` merged locally with upstream `prime` commit `5d7f8343e73ee8361474a9113e983dce2e8af2f3`. Remove the Deorcify package reference and central package version **before restore/build**. The local build also omits the CSharpier build hook. Build `netstandard2.0`; upstream internalizes AngleSharp and its helper libraries. System.Text.Json and its remaining runtime dependencies are separate packages listed in `plugin/packages.config`.
+- `SoundCloudExplode.dll`: the existing bundled custom build is retained.
+
+To reproduce the custom builds from their respective source repositories after applying the changes above:
+
+```sh
+# YoutubeDLSharp repository, Linux with Mono installed:
+dotnet build YoutubeDLSharp/YoutubeDLSharp.csproj -c Release -f net45 \
+  -p:TargetFrameworks=net45 -p:AssemblyVersion=1.1.1.0 \
+  -p:TargetFrameworkRootPath=/usr/lib/mono/xbuild-frameworks/ \
+  -p:FrameworkPathOverride=/usr/lib/mono/4.5-api \
+  -p:AutomaticallyUseReferenceAssemblyPackages=false
+
+# YoutubeExplode repository, SDK 10:
+dotnet build YoutubeExplode/YoutubeExplode.csproj -c Release -f netstandard2.0 \
+  -p:TargetFrameworks=netstandard2.0 -p:CopyLocalLockFileAssemblies=true
+```
+
+Copy only the resulting `YoutubeDLSharp.dll` and `YoutubeExplode.dll` into `plugin/Lib`; retain their license notices. Do not copy the fork build's Newtonsoft.Json over the profile's shared dependency.
+
+### YouTube playback runtime
+
+The media player's cog menu includes **Use Nightly yt-dlp**, below **Admin Only** when that control is visible. This saves a client-side YouTube setting and passes `--update-to nightly` during local downloader setup and subsequent YouTube playback. It takes effect without restarting. Unchecking stops requesting nightly updates; it does not downgrade an already-installed nightly build. It does not affect a remote NodeJS server.
+
+**Use Legacy YouTube Playback**, beside the nightly option, is an optional client-side compatibility mode, off by default. It requests local yt-dlp format **18** (360p H.264/AAC in one MP4) and uses Unity's `VideoPlayer` instead of initializing VLC. It overrides NodeJS extraction while enabled and takes effect on the next load or **Reload Player**, not mid-playback. If format 18 is unavailable, extraction fails rather than choosing another format. Unity must support the stream on that machine; the Proton smoke returned “Cannot read file” for this mode, while VLC playback worked.
+
+Single-video playback currently uses YoutubeDLSharp/yt-dlp; playlists use YoutubeExplode. Current yt-dlp requires a JavaScript runtime for YouTube challenge solving. For the Windows game running under Proton, place **Windows x64 `deno.exe` (2.3 or newer)** beside `yt-dlp.exe` in the Valheim install directory. Installing a Linux Deno binary does not supply the Windows process with that executable. The official `yt-dlp.exe` already bundles the EJS scripts; see the [yt-dlp EJS setup guide](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+
+By default, local yt-dlp requests use `youtube:player_client=default,web_embedded` and prefer separate HTTPS H.264 MP4 video and AAC M4A audio streams, falling back to a combined H.264/AAC MP4. That format fallback still uses **VLC**, not Unity; there is no automatic backend fallback in either mode. Quality is no longer restricted to YouTube's muxed formats or hard-coded format IDs. yt-dlp extracts metadata and direct URLs; the client streams and decodes them without a whole-file download, remux step, or `ffmpeg.exe`.
+
+Default high-quality playback requires the packaged **LibVLCSharp 3.10.1** and **LibVLC 3.0.23** runtime. The build/deployment target includes `LibVLCSharp.dll` and the complete `libvlc/win-x64/` directory beside `OdinOnDemand.dll`. Keep that directory structure on every client; copying only the plugin DLL is not sufficient. This runtime supports the **Windows x64 game, including Proton**. Building on Linux does not provide native Linux-game playback support. A separate VLC installation is not needed.
+
+Both streams share one decoder clock. Video is uploaded to the existing screen texture, and PCM goes through the existing Unity AudioSource, retaining its volume, mixer, and spatial-audio settings. Scheduling accounts for Unity's read-ahead and DSP buffers. Transport commands and network state retain the original URL and media position rather than distributing expiring stream URLs. Use the updated plugin and runtime on every client. A seek made while paused updates the requested position immediately and is applied to the native decoder on resume.
+
+Higher resolutions and simultaneous players increase decoding, memory, and frame-upload costs. Native buffers are bounded; playback does not cache the complete media file. Runtime license and source notices are included in `LibVLC.LICENSE.txt`.
 
 ## Use
 

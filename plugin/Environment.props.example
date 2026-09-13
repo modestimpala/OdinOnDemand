@@ -3,28 +3,30 @@
   <PropertyGroup>
     <!-- Valheim Game Install Path -->
     <!-- Update this to your Steam Valheim installation folder -->
-    <VALHEIM_INSTALL>C:\Program Files (x86)\Steam\steamapps\common\Valheim</VALHEIM_INSTALL>
+    <VALHEIM_INSTALL Condition="'$(OS)' == 'Windows_NT'">C:\Program Files (x86)\Steam\steamapps\common\Valheim</VALHEIM_INSTALL>
+    <VALHEIM_INSTALL Condition="'$(OS)' == 'Unix'">$(HOME)/.local/share/Steam/steamapps/common/Valheim</VALHEIM_INSTALL>
     
     <!-- Valheim Managed DLLs -->
-    <!-- Automatically derived from VALHEIM_INSTALL -->
-    <VALHEIM_MANAGED>$(VALHEIM_INSTALL)\Valheim_Data\Managed</VALHEIM_MANAGED>
+    <!-- Match the installed directory's capitalization on Linux. -->
+    <VALHEIM_MANAGED>$(VALHEIM_INSTALL)/valheim_Data/Managed</VALHEIM_MANAGED>
+    <VALHEIM_MANAGED Condition="!Exists('$(VALHEIM_MANAGED)')">$(VALHEIM_INSTALL)/Valheim_Data/Managed</VALHEIM_MANAGED>
     
     <!-- r2modman Profile Path -->
     <!-- Update this to your r2modman profile path -->
-    <R2MODMAN_PROFILE>C:\Users\YourUsername\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\Default</R2MODMAN_PROFILE>
+    <R2MODMAN_PROFILE Condition="'$(OS)' == 'Windows_NT'">C:\Users\YourUsername\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\OdinOnDemand-dev</R2MODMAN_PROFILE>
+    <R2MODMAN_PROFILE Condition="'$(OS)' == 'Unix'">$(HOME)/.config/r2modmanPlus-local/Valheim/profiles/OdinOnDemand-dev</R2MODMAN_PROFILE>
     
     <!-- BepInEx Paths -->
     <!-- Automatically derived from R2MODMAN_PROFILE -->
     <BEPINEX_CORE>$(R2MODMAN_PROFILE)\BepInEx\core</BEPINEX_CORE>
     <BEPINEX_PLUGINS>$(R2MODMAN_PROFILE)\BepInEx\plugins</BEPINEX_PLUGINS>
     
-    <!-- Publicized Assemblies -->
-    <!-- Update this to your AssemblyPublicizer output folder -->
-    <PUBLICIZED_ASSEMBLIES>C:\Path\To\Your\AssemblyPublicizer\publicized_assemblies</PUBLICIZED_ASSEMBLIES>
+    <!-- Publicized game references are generated automatically under plugin/obj. -->
+    <!-- Never deploy publicized assemblies or overwrite the installed game DLLs. -->
     
     <!-- Deployment Path -->
-    <!-- Where the built plugin should be deployed (optional) -->
-    <MOD_DEPLOYPATH Condition="'$(MOD_DEPLOYPATH)' == ''">F:\SteamLibrary\steamapps\common\Valheim\BepInEx\plugins</MOD_DEPLOYPATH>
+    <!-- Only the explicit Deploy target copies the plugin into the profile. -->
+    <MOD_DEPLOYPATH>$(BEPINEX_PLUGINS)/OdinOnDemand</MOD_DEPLOYPATH>
   </PropertyGroup>
 </Project>
 

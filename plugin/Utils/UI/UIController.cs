@@ -4,7 +4,6 @@ using System.Globalization;
 using System.Linq;
 using Jotunn.Managers;
 using OdinOnDemand.Dynamic;
-using OdinOnDemand.Interfaces;
 using OdinOnDemand.MPlayer;
 using OdinOnDemand.Utils.Config;
 using OdinOnDemand.Utils.Net;
@@ -46,6 +45,8 @@ namespace OdinOnDemand.Utils.UI
         private Slider _volumeSlider;
         private Slider _volumeSliderDynamic;
         private Toggle _adminOnlyToggle;
+        private Toggle _nightlyYtDlpToggle;
+        private Toggle _legacyYoutubeToggle;
         internal Image RadioPanelThumbnail;
         
         private ToggleGroup _entryToggleGroup;
@@ -582,6 +583,8 @@ namespace OdinOnDemand.Utils.UI
                     ? OODConfig.MasterVolumeScreen.Value
                     : OODConfig.MasterVolumeMusicplayer.Value;
                 if (_adminOnlyToggle) _adminOnlyToggle.isOn = _basePlayer.PlayerSettings.AdminOnly;
+                if (_nightlyYtDlpToggle) _nightlyYtDlpToggle.SetIsOnWithoutNotify(OODConfig.UseNightlyYtDlp.Value);
+                if (_legacyYoutubeToggle) _legacyYoutubeToggle.SetIsOnWithoutNotify(OODConfig.UseLegacyYoutubePlayback.Value);
             }
             UpdateSpeakerCount();
             _settingsPanelObj.SetActive(_basePlayer.PlayerSettings.IsSettingsGuiActive);
@@ -667,6 +670,36 @@ namespace OdinOnDemand.Utils.UI
                         new Vector2(16, 16);
                     t.text = "Admin Only";
                 }
+
+                var nightlyToggleObj = DefaultControls.CreateToggle(_oodResources);
+                nightlyToggleObj.transform.SetParent(contentTransform, false);
+                _nightlyYtDlpToggle = nightlyToggleObj.GetComponent<Toggle>();
+                _nightlyYtDlpToggle.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
+                _nightlyYtDlpToggle.isOn = OODConfig.UseNightlyYtDlp.Value;
+                _nightlyYtDlpToggle.onValueChanged.AddListener(OnNightlyYtDlpToggleChanged);
+                var nightlyLabel = nightlyToggleObj.transform.Find("Label").GetComponent<Text>();
+                GUIManager.Instance.ApplyTextStyle(nightlyLabel, GUIManager.Instance.AveriaSerifBold,
+                    GUIManager.Instance.ValheimOrange);
+                nightlyToggleObj.transform.Find("Background").GetComponent<RectTransform>().sizeDelta =
+                    new Vector2(16, 16);
+                nightlyToggleObj.transform.Find("Background/Checkmark").GetComponent<RectTransform>().sizeDelta =
+                    new Vector2(16, 16);
+                nightlyLabel.text = "Use Nightly yt-dlp";
+
+                var legacyToggleObj = DefaultControls.CreateToggle(_oodResources);
+                legacyToggleObj.transform.SetParent(contentTransform, false);
+                _legacyYoutubeToggle = legacyToggleObj.GetComponent<Toggle>();
+                _legacyYoutubeToggle.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
+                _legacyYoutubeToggle.isOn = OODConfig.UseLegacyYoutubePlayback.Value;
+                _legacyYoutubeToggle.onValueChanged.AddListener(OnLegacyYoutubeToggleChanged);
+                var legacyLabel = legacyToggleObj.transform.Find("Label").GetComponent<Text>();
+                GUIManager.Instance.ApplyTextStyle(legacyLabel, GUIManager.Instance.AveriaSerifBold,
+                    GUIManager.Instance.ValheimOrange);
+                legacyToggleObj.transform.Find("Background").GetComponent<RectTransform>().sizeDelta =
+                    new Vector2(16, 16);
+                legacyToggleObj.transform.Find("Background/Checkmark").GetComponent<RectTransform>().sizeDelta =
+                    new Vector2(16, 16);
+                legacyLabel.text = "Use Legacy YouTube Playback";
 
                 /////////////////////////////
                 /// AUDIO DISTANCE PANEL ///
@@ -858,7 +891,7 @@ namespace OdinOnDemand.Utils.UI
                     new Vector2(0.5f, 0.5f),
                     new Vector2(0f, -2f),
                     InputField.ContentType.Standard,
-                    _basePlayer.mScreen.time.ToString(CultureInfo.CurrentCulture),
+                    _basePlayer.PlaybackTime.ToString(CultureInfo.CurrentCulture),
                     14,
                     110f,
                     26f);
@@ -921,7 +954,7 @@ namespace OdinOnDemand.Utils.UI
             _basePlayer.PlayerSettings.IsLocked = !_basePlayer.PlayerSettings.IsLocked;
             UpdateLockIcon();
             _basePlayer.SaveZDO();
-            _rpc.SendData(0, CinemaPackage.RPCDataType.UpdateZDO, _basePlayer.PlayerSettings.PlayerType, _basePlayer.MediaPlayerID, _basePlayer.gameObject.transform.position, (float)_basePlayer.mScreen.time);
+            _rpc.SendData(0, CinemaPackage.RPCDataType.UpdateZDO, _basePlayer.PlayerSettings.PlayerType, _basePlayer.MediaPlayerID, _basePlayer.gameObject.transform.position, (float)_basePlayer.PlaybackTime);
         }
 
         private void UpdateLockIcon()
@@ -939,6 +972,16 @@ namespace OdinOnDemand.Utils.UI
                     UnlockedIconObj.SetActive(true);
                 }
             }
+        }
+
+        private static void OnNightlyYtDlpToggleChanged(bool enabled)
+        {
+            OODConfig.UseNightlyYtDlp.Value = enabled;
+        }
+
+        private static void OnLegacyYoutubeToggleChanged(bool enabled)
+        {
+            OODConfig.UseLegacyYoutubePlayback.Value = enabled;
         }
 
         private void OnVolumeSliderChanged(float vol)
@@ -1058,9 +1101,8 @@ namespace OdinOnDemand.Utils.UI
             _basePlayer.PlayerSettings.IsLooping = !_basePlayer.PlayerSettings.IsLooping;
             if (!_basePlayer.PlayerSettings.IsPlayingPlaylist)
             {
-                _basePlayer.mAudio.loop = _basePlayer.PlayerSettings.IsLooping;
-                ((IPlayer)_basePlayer).mScreen.isLooping = _basePlayer.PlayerSettings.IsLooping;
-                _rpc.SendData(0, CinemaPackage.RPCDataType.SetLoop, _basePlayer.PlayerSettings.PlayerType, _basePlayer.MediaPlayerID, _basePlayer.gameObject.transform.position, (float)_basePlayer.mScreen.time , "",
+                _basePlayer.SetLooping(_basePlayer.PlayerSettings.IsLooping);
+                _rpc.SendData(0, CinemaPackage.RPCDataType.SetLoop, _basePlayer.PlayerSettings.PlayerType, _basePlayer.MediaPlayerID, _basePlayer.gameObject.transform.position, (float)_basePlayer.PlaybackTime , "",
                     CinemaPackage.PlayerStatus.NULL, 1, _basePlayer.PlayerSettings.IsLooping);
             }
 
@@ -1075,8 +1117,8 @@ namespace OdinOnDemand.Utils.UI
 
         public void SetLoop(bool looping)
         {
-            _basePlayer.mAudio.loop = looping;
-            ((IPlayer)_basePlayer).mScreen.isLooping = looping;
+            _basePlayer.PlayerSettings.IsLooping = looping;
+            _basePlayer.SetLooping(looping);
             if (URLPanelObj)
                 if (URLPanelObj.activeInHierarchy)
                     _toggleLoopObj.GetComponentInChildren<Text>().text = looping ? "Y" : "N";

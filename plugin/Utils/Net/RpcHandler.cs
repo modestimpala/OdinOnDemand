@@ -13,7 +13,6 @@ using OdinOnDemand.Dynamic;
 using OdinOnDemand.MPlayer;
 using OdinOnDemand.Utils.Config;
 using UnityEngine;
-using UnityEngine.Serialization;
 using static OdinOnDemand.Utils.Net.CinemaPackage;
 using CompressionLevel = System.IO.Compression.CompressionLevel;
 using Logger = Jotunn.Logger;
@@ -52,7 +51,7 @@ namespace OdinOnDemand.Utils.Net
                 y = cinemaPackage.data.y,
                 z = cinemaPackage.data.z,
                 mediaPlayerID = cinemaPackage.data.mediaPlayerID,
-                playerStatus = cinemaPackage.playerStatus
+                playerStatus = cinemaPackage.data.playerStatus
             };
             package.Prepare(RPCDataType.SendStation, cinemaPackage.player, data);
             
@@ -161,11 +160,11 @@ namespace OdinOnDemand.Utils.Net
 
             Action action = package.type switch
             {
-                RPCDataType.SetVideoUrl => () => mp.RPC_SetURL(package.data.url, package.playerStatus == PlayerStatus.Paused, package.data.time),
+                RPCDataType.SetVideoUrl => () => mp.RPC_SetURL(package.data.url, package.data.playerStatus == PlayerStatus.Paused, package.data.time),
                 RPCDataType.SetAudioUrl => () => { }, 
                 RPCDataType.Stop => () => mp.Stop(true),
-                RPCDataType.Pause => () => mp.Pause(true),
-                RPCDataType.Play => () => mp.Play(true),
+                RPCDataType.Pause => () => { mp.Pause(true); mp.UpdatePlayerTime(package.data.time); },
+                RPCDataType.Play => () => { mp.UpdatePlayerTime(package.data.time); mp.Play(true); },
                 RPCDataType.SetLoop => () => mp.UIController.SetLoop(package.data.toggleBool),
                 RPCDataType.SetLock => () => mp.SetLock(package.data.toggleBool),
                 RPCDataType.UpdateZDO => () => mp.RPC_UpdateZDO(),
@@ -245,7 +244,6 @@ namespace OdinOnDemand.Utils.Net
         public Data data;
         public RPCDataType type;
         public MediaPlayers player;
-        [FormerlySerializedAs("status")] public PlayerStatus playerStatus;
 
         public virtual void Prepare(RPCDataType type, MediaPlayers player, Data data)
         {

@@ -16,11 +16,12 @@ namespace OdinOnDemand.Patches
             typeof(Piece),
             typeof(Vector3),
             typeof(Quaternion),
+            typeof(bool),
             typeof(bool)
         })]
         private static class PlacePiece_Patch
         {
-            private static bool Prefix(Piece piece, Vector3 pos, Quaternion rot, bool doAttack = true)
+            private static bool Prefix(Piece piece)
             {
                 if (Pieces.Contains(piece.gameObject.name) && OODConfig.VipMode.Value)
                 {

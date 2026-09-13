@@ -23,6 +23,8 @@ namespace OdinOnDemand.Utils.Config
         public static ConfigEntry<string> YtAuthCode { get; private set; } // NodeJS Auth Code
         //public static ConfigEntry<string> assetsToLoad { get; set; }
         public static ConfigEntry<bool> IsYtEnabled { get; private set; } 
+        public static ConfigEntry<bool> UseNightlyYtDlp { get; private set; }
+        public static ConfigEntry<bool> UseLegacyYoutubePlayback { get; private set; }
         public static ConfigEntry<bool> AutoUpdateRecipes { get; private set; }
         public static ConfigEntry<bool> DebugEnabled { get; private set; }
         public static ConfigEntry<bool> VideoBacklight { get; private set; } 
@@ -74,6 +76,15 @@ namespace OdinOnDemand.Utils.Config
                         "The auth code for the NodeJS yt-dlp server. This must match the one in server.js.", null,
                         new ConfigurationManagerAttributes { IsAdminOnly = true }));
             }
+
+            UseNightlyYtDlp = config.Bind("YouTube", "Use Nightly yt-dlp", false,
+                new ConfigDescription("Pass --update-to nightly to the local yt-dlp on the next YouTube playback. " +
+                    "Client-side setting. Disabling stops requesting nightly updates; it does not downgrade yt-dlp."));
+
+            UseLegacyYoutubePlayback = config.Bind("YouTube", "Use Legacy YouTube Playback", false,
+                new ConfigDescription("Use local yt-dlp format 18 (360p video with audio) and Unity playback instead of VLC. " +
+                    "Client-side; applies on the next load or reload, including when NodeJS is configured. " +
+                    "Requires Unity's native media support. No automatic fallback if the format or player is unavailable."));
 
             MasterVolumeScreen = config.Bind("Mixer Volumes", "Screen Master Volume", 1f,
                 new ConfigDescription("Master volume of all Screens. Clientside setting.",
