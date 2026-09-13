@@ -1,289 +1,232 @@
-﻿using System;
+using System;
 using System.Collections;
-using System.Threading;
+using System.Collections.Generic;
 using System.IO;
-using System.Text;
+using System.Threading;
+using Newtonsoft.Json.Linq;
+using OdinOnDemand.Utils.Config;
 using UnityEngine;
 using YoutubeDLSharp;
 using YoutubeDLSharp.Options;
-using Newtonsoft.Json.Linq;
 
 namespace OdinOnDemand.Utils.Net.Explode
 {
+    public sealed class YoutubeStreams
+    {
+        public string VideoUrl { get; }
+        public string AudioUrl { get; }
+
+        /// <summary>
+        ///     Request headers yt-dlp used for the extraction. YouTube ties some stream URLs to the
+        ///     requesting client, so replaying them verbatim avoids 403s.
+        /// </summary>
+        public IDictionary<string, string> Headers { get; }
+
+        public YoutubeStreams(string videoUrl, string audioUrl = null,
+            IDictionary<string, string> headers = null)
+        {
+            VideoUrl = videoUrl;
+            AudioUrl = audioUrl;
+            Headers = headers ?? new Dictionary<string, string>();
+        }
+    }
+
     public class DLSharp : MonoBehaviour
     {
         private const int DefaultTimeoutSeconds = 120;
+        private static readonly string YtDlpPath = Path.Combine(BepInEx.Paths.GameRootPath, "yt-dlp.exe");
         private YoutubeDL Ytdl { get; set; }
-        private OptionSet Options { get; } = new OptionSet()
-        {
-            Format = "18/22/37/best[ext=mp4]",
-            DumpSingleJson = true
-        };
-
-        private OptionSet UpdateOptions { get; } = new OptionSet()
+        private OptionSet UpdateOptions { get; } = new OptionSet
         {
             Update = true,
             NoPostOverwrites = true
         };
 
-        private string _videoUrl = "";
-        private StringBuilder _jsonOutput;
-        private readonly Progress<string> _output;
-
-        private static readonly string YtDlpPath = Path.Combine(BepInEx.Paths.GameRootPath, "yt-dlp.exe");
-
-        public DLSharp()
+        internal static YoutubeStreams ParseStreams(string output)
         {
-            _output = new Progress<string>(s =>
+            var json = JObject.Parse(output);
+            if (json["requested_formats"] is JArray formats)
             {
-                if (s != null)
+                string videoUrl = null;
+                string audioUrl = null;
+                JToken videoFormat = null;
+                foreach (var format in formats)
                 {
-                    if (_jsonOutput != null)
+                    var url = (string)format["url"];
+                    var videoCodec = (string)format["vcodec"];
+                    var audioCodec = (string)format["acodec"];
+                    if (videoCodec != null && videoCodec != "none" && audioCodec == "none")
                     {
-                        _jsonOutput.AppendLine(s);
+                        videoUrl = url;
+                        videoFormat = format;
                     }
+                    else if (audioCodec != null && audioCodec != "none" && videoCodec == "none")
+                        audioUrl = url;
                 }
-            });
-        }
-
-        private bool CheckYtDlpExists()
-        {
-            return File.Exists(YtDlpPath);
-        }
-
-        private string ExtractJsonFromOutput(string output)
-        {
-            if (string.IsNullOrEmpty(output))
-                return null;
-
-            int jsonStart = output.IndexOf('{');
-            int jsonEnd = output.LastIndexOf('}');
-
-            if (jsonStart >= 0 && jsonEnd > jsonStart)
+                if (IsStreamUrl(videoUrl) && IsStreamUrl(audioUrl))
+                    return new YoutubeStreams(videoUrl, audioUrl, ParseHeaders(videoFormat, json));
+            }
+            else
             {
-                return output.Substring(jsonStart, jsonEnd - jsonStart + 1);
+                var url = (string)json["url"];
+                var videoCodec = (string)json["vcodec"];
+                var audioCodec = (string)json["acodec"];
+                if (IsStreamUrl(url) && !string.IsNullOrEmpty(videoCodec) && videoCodec != "none" &&
+                    !string.IsNullOrEmpty(audioCodec) && audioCodec != "none")
+                    return new YoutubeStreams(url, null, ParseHeaders(json, json));
+            }
+            throw new FormatException("yt-dlp did not return a complete video/audio stream selection.");
+        }
+
+        /// <summary>
+        ///     Reads the per-format request headers, falling back to the extraction-wide ones.
+        /// </summary>
+        private static IDictionary<string, string> ParseHeaders(JToken format, JToken root)
+        {
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var source = (format != null ? format["http_headers"] : null) as JObject ??
+                         root["http_headers"] as JObject;
+            if (source == null) return headers;
+
+            foreach (var header in source.Properties())
+            {
+                var value = (string)header.Value;
+                if (!string.IsNullOrEmpty(value)) headers[header.Name] = value;
             }
 
-            return null;
+            return headers;
+        }
+
+        private static bool IsStreamUrl(string url)
+        {
+            return Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
         }
 
         public IEnumerator Setup(Action<bool> onComplete = null, int timeoutSeconds = DefaultTimeoutSeconds)
         {
-            float elapsedTime = 0;
-            bool setupComplete = false;
-
-            if (CheckYtDlpExists())
+            if (!File.Exists(YtDlpPath))
             {
-                try
+                Jotunn.Logger.LogInfo("yt-dlp.exe not found. Downloading...");
+                var download = YoutubeDLSharp.Utils.DownloadYtDlp(BepInEx.Paths.GameRootPath);
+                float elapsed = 0;
+                while (!download.IsCompleted && elapsed < timeoutSeconds)
                 {
-                    Ytdl = new YoutubeDL
-                    {
-                        YoutubeDLPath = YtDlpPath
-                    };
-                    var updateOperation = Ytdl.RunWithOptions(
-                        "",
-                        UpdateOptions,
-                        ct: CancellationToken.None,
-                        progress: null,
-                        output: _output,
-                        showArgs: false
-                    );
-                    setupComplete = true;
-                    onComplete?.Invoke(true);
+                    elapsed += Time.deltaTime;
+                    yield return null;
+                }
+                if (!download.IsCompleted || download.IsFaulted || download.IsCanceled || !File.Exists(YtDlpPath))
+                {
+                    Jotunn.Logger.LogError("yt-dlp download failed or timed out.");
+                    onComplete?.Invoke(false);
                     yield break;
                 }
-                catch (Exception ex)
-                {
-                    Jotunn.Logger.LogError($"Setup failed with existing yt-dlp: {ex.Message}");
-                }
             }
 
-            Jotunn.Logger.LogInfo("yt-dlp.exe not found or invalid. Downloading...");
-            var downloadOperation = YoutubeDLSharp.Utils.DownloadYtDlp();
-
-            while (!setupComplete && elapsedTime < timeoutSeconds)
+            Ytdl = new YoutubeDL { YoutubeDLPath = YtDlpPath };
+            ExternalJsRuntime.Refresh();
+            UpdateOptions.UpdateTo = OODConfig.UseNightlyYtDlp.Value ? "nightly" : null;
+            // Updating is best-effort; extraction also applies the selected nightly channel.
+            var update = Ytdl.RunWithOptions(Array.Empty<string>(), UpdateOptions, CancellationToken.None);
+            float updateElapsed = 0;
+            while (!update.IsCompleted && updateElapsed < timeoutSeconds)
             {
-                elapsedTime += Time.deltaTime;
-                
-                if (downloadOperation.IsCompleted)
-                {
-                    try
-                    {
-                        Ytdl = new YoutubeDL
-                        {
-                            YoutubeDLPath = YtDlpPath
-                        };
-                        setupComplete = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        Jotunn.Logger.LogError($"Setup failed: {ex.Message}");
-                        onComplete?.Invoke(false);
-                        yield break;
-                    }
-                }
-
+                updateElapsed += Time.deltaTime;
                 yield return null;
             }
-
-            if (!setupComplete)
-            {
-                Jotunn.Logger.LogError($"Setup timed out after {timeoutSeconds} seconds");
-                onComplete?.Invoke(false);
-                yield break;
-            }
-
+            if (update.IsFaulted)
+                Jotunn.Logger.LogWarning($"yt-dlp update failed: {update.Exception.GetBaseException().Message}");
             onComplete?.Invoke(true);
         }
 
-        public IEnumerator GetVideoUrl(string url, Action<string> onComplete, int timeoutSeconds = DefaultTimeoutSeconds)
+        public IEnumerator GetStreams(string url, Action<YoutubeStreams> onComplete, int timeoutSeconds = DefaultTimeoutSeconds)
         {
             if (Ytdl == null)
             {
-                Jotunn.Logger.LogError("GetVideoUrl called before Setup");
-                onComplete?.Invoke(string.Empty);
-                yield break;
-            }
-
-            float elapsedTime = 0;
-            _videoUrl = "";
-            _jsonOutput = new StringBuilder();
-            bool operationComplete = false;
-
-            var cts = new CancellationTokenSource();
-            var operation = Ytdl.RunWithOptions(
-                url,
-                Options,
-                ct: cts.Token,
-                progress: null,
-                output: _output,
-                showArgs: false
-            );
-
-            while (!operationComplete && elapsedTime < timeoutSeconds)
-            {
-                elapsedTime += Time.deltaTime;
-
-                if (operation.IsCompleted)
+                bool setupSuccess = false;
+                yield return Setup(success => setupSuccess = success, timeoutSeconds);
+                if (!setupSuccess)
                 {
-                    var result = operation.Result;
-                    
-                    if (!result.Success)
-                    {
-                        Jotunn.Logger.LogError($"Failed to get video URL. Errors: {string.Join(", ", result.ErrorOutput)}");
-                        onComplete?.Invoke(string.Empty);
-                        yield break;
-                    }
-
-                    try
-                    {
-                        var fullOutput = _jsonOutput.ToString();
-                        var jsonText = ExtractJsonFromOutput(fullOutput);
-                        
-                        if (string.IsNullOrEmpty(jsonText))
-                        {
-                            Jotunn.Logger.LogError("No JSON found in output");
-                            onComplete?.Invoke(string.Empty);
-                            yield break;
-                        }
-
-                        var json = JObject.Parse(jsonText);
-                        
-                        _videoUrl = json["url"]?.ToString();
-                        
-                        if (string.IsNullOrEmpty(_videoUrl))
-                        {
-                            var requestedFormats = json["requested_formats"];
-                            if (requestedFormats != null && requestedFormats.HasValues)
-                            {
-                                _videoUrl = requestedFormats[0]["url"]?.ToString();
-                            }
-                        }
-                        
-                        if (string.IsNullOrEmpty(_videoUrl))
-                        {
-                            Jotunn.Logger.LogError("No video URL found in JSON response");
-                            onComplete?.Invoke(string.Empty);
-                            yield break;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Jotunn.Logger.LogError($"Failed to parse JSON output: {ex.Message}");
-                        onComplete?.Invoke(string.Empty);
-                        yield break;
-                    }
-
-                    operationComplete = true;
+                    onComplete?.Invoke(null);
+                    yield break;
                 }
-
-                yield return null;
             }
 
-            if (!operationComplete)
+            using var cts = new CancellationTokenSource();
+            // Software decoding and the per-frame CPU upload scale with resolution, so the height
+            // cap is the difference between smooth playback and a stalled game.
+            var maxHeight = OODConfig.MaxVideoHeight.Value;
+            var heightFilter = $"[height<={maxHeight}]";
+            // Keep selection request-local: a reload can overlap an older extraction.
+            var options = new OptionSet
             {
-                cts.Cancel();
-                Jotunn.Logger.LogError($"GetVideoUrl operation timed out after {timeoutSeconds} seconds");
-                onComplete?.Invoke(string.Empty);
-                yield break;
-            }
-
-            onComplete?.Invoke(_videoUrl);
-        }
-
-        public IEnumerator GetVideoUrlWithRetry(string url, Action<string> onComplete, int maxRetries = 3, int timeoutSeconds = DefaultTimeoutSeconds)
-        {
-            string result = string.Empty;
-            
-            for (int i = 0; i < maxRetries; i++)
+                ExtractorArgs = "youtube:player_client=default,web_embedded",
+                Format =
+                    $"bestvideo[ext=mp4][vcodec^=avc1][protocol=https]{heightFilter}+bestaudio[ext=m4a][acodec^=mp4a][protocol=https]/" +
+                    $"best[ext=mp4][vcodec^=avc1][acodec^=mp4a][protocol=https]{heightFilter}/" +
+                    "bestvideo[ext=mp4][vcodec^=avc1][protocol=https]+bestaudio[ext=m4a][acodec^=mp4a][protocol=https]",
+                DumpSingleJson = true,
+                NoPlaylist = true,
+                UpdateTo = OODConfig.UseNightlyYtDlp.Value ? "nightly" : null
+            };
+            // Only deno is enabled by default; point yt-dlp at any other runtime we located.
+            var jsRuntimes = ExternalJsRuntime.JsRuntimesArgument;
+            if (jsRuntimes != null) options.AddCustomOption("--js-runtimes", jsRuntimes);
+            var operation = Ytdl.RunWithOptions(new[] { url }, options, cts.Token);
+            try
             {
-                bool attemptComplete = false;
-                
-                StartCoroutine(GetVideoUrl(url, (videoUrl) =>
+                float elapsedTime = 0;
+                while (!operation.IsCompleted && elapsedTime < timeoutSeconds)
                 {
-                    result = videoUrl;
-                    attemptComplete = true;
-                }, timeoutSeconds));
-
-                while (!attemptComplete)
-                {
+                    elapsedTime += Time.deltaTime;
                     yield return null;
                 }
+                if (!operation.IsCompleted)
+                {
+                    Jotunn.Logger.LogError($"GetStreams timed out after {timeoutSeconds} seconds");
+                    onComplete?.Invoke(null);
+                    yield break;
+                }
 
-                if (!string.IsNullOrEmpty(result))
+                YoutubeStreams streams = null;
+                try
+                {
+                    var result = operation.GetAwaiter().GetResult();
+                    ExternalJsRuntime.InspectYtDlpOutput(result.ErrorOutput);
+                    if (result.Success)
+                        streams = ParseStreams(string.Join("\n", result.Data));
+                    else
+                        Jotunn.Logger.LogError($"Failed to get YouTube streams. Errors: {string.Join(", ", result.ErrorOutput)}");
+                }
+                catch (Exception ex)
+                {
+                    Jotunn.Logger.LogError($"Failed to resolve YouTube streams: {ex.Message}");
+                }
+                onComplete?.Invoke(streams);
+            }
+            finally
+            {
+                if (!operation.IsCompleted)
+                    cts.Cancel();
+            }
+        }
+
+        public IEnumerator GetStreamsWithRetry(string url, Action<YoutubeStreams> onComplete, int maxRetries = 3, int timeoutSeconds = DefaultTimeoutSeconds)
+        {
+            for (int i = 0; i < maxRetries; i++)
+            {
+                YoutubeStreams result = null;
+                yield return GetStreams(url, streams => result = streams, timeoutSeconds);
+                if (result != null)
                 {
                     onComplete?.Invoke(result);
                     yield break;
                 }
-
                 if (i < maxRetries - 1)
-                {
-                    float waitTime = Mathf.Pow(2, i);
-                    yield return new WaitForSeconds(waitTime);
-                }
+                    yield return new WaitForSeconds(Mathf.Pow(2, i));
             }
-
-            Jotunn.Logger.LogError($"Failed to get video URL after {maxRetries} attempts");
-            onComplete?.Invoke(string.Empty);
-        }
-
-        public void BeginVideoUrlFetch(string url, Action<string> onComplete)
-        {
-            StartCoroutine(SetupAndFetch(url, onComplete));
-        }
-
-        private IEnumerator SetupAndFetch(string url, Action<string> onComplete)
-        {
-            bool setupSuccess = false;
-            yield return StartCoroutine(Setup((success) => setupSuccess = success));
-
-            if (!setupSuccess)
-            {
-                onComplete?.Invoke(string.Empty);
-                yield break;
-            }
-
-            yield return StartCoroutine(GetVideoUrlWithRetry(url, onComplete));
+            Jotunn.Logger.LogError($"Failed to get YouTube streams after {maxRetries} attempts");
+            onComplete?.Invoke(null);
         }
     }
 }

@@ -153,6 +153,11 @@ namespace OdinOnDemand.Components
             return mName;
         }
 
+        public float GetHoverOffset()
+        {
+            return 0f;
+        }
+
         public bool Interact(Humanoid user, bool hold, bool alt) //Open screen UI
         {
             if (OODConfig.VipMode.Value)

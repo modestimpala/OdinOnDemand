@@ -3,6 +3,48 @@
 
 ### Versions:
 
+## 1.2.0
+ - Updated interfaces, equipment hashes, and Harmony placement support for Valheim 1.0; restored the **OdinOnDemand** build-menu group using usage tags.
+ - Added cog settings for **Max Quality** (360p-2160p, default 1080p) and persisted **Use Nightly yt-dlp**, plus a fixed-height, scrollable settings layout.
+ - Added **External JS** runtime status, setup guidance, yt-dlp warnings, and `--js-runtimes` support for node, bun, and qjs.
+ - Improved YouTube playback with bounded HTTP range requests, split-first H.264/AAC format selection, untouched signed URLs, and clearer unavailable-media errors.
+ - Added packaged Windows x64 LibVLC streaming for separate video/audio, including Proton, without full downloads or remuxing.
+ - Shared one LibVLC instance across players and reduced packaged modules from 101 MB to 28 MB; replace the entire `libvlc` folder when updating.
+ - Improved Unity video/audio output, fixing a native buffer over-read and playback timing issues.
+ - Unified playback, seeking, looping, playlists, and source changes around the decoder clock, preventing stale extraction results from restarting stopped players.
+ - Fixed RPC pause/position synchronization while preserving artwork, gramophone animations, station timers, and direct extensionless URLs.
+ - Migrated YoutubeExplode from System.Text.Json to Newtonsoft.Json.
+
+## 1.0.11
+
+- Update/remove dependencies, switch to JsonDotNET 
+
+## 1.0.10
+
+- Fixed log spam
+- Fixed YT and other video playback
+
+## 1.0.9
+
+- Revised VIP Rank System to not hard reference Steamworks
+  - This should allow Xbox users to run the mod properly.
+- Fixed remote control component
+- Added auto-update for Yt-dlp DLSharp extension
+
+## 1.0.8
+ - Supplemented broken YouTubeExplode commands with YoutubeDLSharp
+	- As a side effect, you can now grab videos from a wide variety of sites: vimeo, TikTok, dailymotion, facebook, Instagram, twitter, reddit, etc. Just try your site of choice and it may return a valid file.
+	- On the flip side, YouTube videos are now limited to 360p due to scarce muxed video options 
+ - Fixed SoundcloudExplode 401 errors
+ - Fixed PlacePiecePatch 
+
+## 1.0.7
+ - Fix Relative URL Lookup
+ - Fix Loop UI Text
+ - Remote Controller support for ValheimRAFT, and any other similar mods
+ - Fix Relative Video loading prepare
+ - Potential URL fix for foreign languages
+
 ## 1.0.6
  - Fixed crash when attempting to listen to SoundCloud links
 
