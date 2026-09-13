@@ -24,7 +24,7 @@ namespace OdinOnDemand.Utils.Config
         //public static ConfigEntry<string> assetsToLoad { get; set; }
         public static ConfigEntry<bool> IsYtEnabled { get; private set; } 
         public static ConfigEntry<bool> UseNightlyYtDlp { get; private set; }
-        public static ConfigEntry<bool> UseLegacyYoutubePlayback { get; private set; }
+        public static ConfigEntry<int> MaxVideoHeight { get; private set; }
         public static ConfigEntry<bool> AutoUpdateRecipes { get; private set; }
         public static ConfigEntry<bool> DebugEnabled { get; private set; }
         public static ConfigEntry<bool> VideoBacklight { get; private set; } 
@@ -81,10 +81,12 @@ namespace OdinOnDemand.Utils.Config
                 new ConfigDescription("Pass --update-to nightly to the local yt-dlp on the next YouTube playback. " +
                     "Client-side setting. Disabling stops requesting nightly updates; it does not downgrade yt-dlp."));
 
-            UseLegacyYoutubePlayback = config.Bind("YouTube", "Use Legacy YouTube Playback", false,
-                new ConfigDescription("Use local yt-dlp format 18 (360p video with audio) and Unity playback instead of VLC. " +
-                    "Client-side; applies on the next load or reload, including when NodeJS is configured. " +
-                    "Requires Unity's native media support. No automatic fallback if the format or player is unavailable."));
+            MaxVideoHeight = config.Bind("YouTube", "Max Video Height", 1080,
+                new ConfigDescription(
+                    "Tallest YouTube video stream to request. Decoding is done in software and every " +
+                    "frame is uploaded from the CPU, so 1440p and 2160p cost several times more than " +
+                    "1080p and can stall the game. Client-side; applies on the next load or reload.",
+                    new AcceptableValueList<int>(360, 480, 720, 1080, 1440, 2160)));
 
             MasterVolumeScreen = config.Bind("Mixer Volumes", "Screen Master Volume", 1f,
                 new ConfigDescription("Master volume of all Screens. Clientside setting.",

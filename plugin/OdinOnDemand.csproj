@@ -59,9 +59,11 @@
         <Compile Include="Dynamic\StationManager.cs" />
         <Compile Include="Interfaces\IPlayer.cs" />
         <Compile Include="MPlayer\AudioFader.cs" />
+        <Compile Include="MPlayer\ChunkedHttpMediaInput.cs" />
         <Compile Include="MPlayer\RankSystem.cs" />
         <Compile Include="Patches\HaldorCustomPatch.cs" />
         <Compile Include="Patches\PlacePiecePatch.cs" />
+        <Compile Include="Patches\PieceCategoryPatch.cs" />
         <Compile Include="Patches\RemovePiecePatch.cs" />
         <Compile Include="MPlayer\BasePlayer.cs" />
         <Compile Include="MPlayer\PlayerSettings.cs" />
@@ -72,6 +74,7 @@
         <Compile Include="Utils\Net\ComponentLists.cs" />
         <Compile Include="Utils\Net\Explode\Async.cs" />
         <Compile Include="Utils\Net\Explode\DLSharp.cs" />
+        <Compile Include="Utils\Net\Explode\ExternalJsRuntime.cs" />
         <Compile Include="Utils\Net\Explode\UrlGrab.cs" />
         <Compile Include="Utils\Net\RpcHandler.cs" />
         <Compile Include="Utils\UI\AudioWaveformVisualizer.cs" />
@@ -187,14 +190,9 @@
             <HintPath>$(VALHEIM_MANAGED)/System.Memory.dll</HintPath>
             <Private>False</Private>
         </Reference>
-        <Reference Include="System.IO.Pipelines">
-            <HintPath>packages/System.IO.Pipelines.10.0.11/lib/net462/System.IO.Pipelines.dll</HintPath>
-        </Reference>
-        <Reference Include="System.Text.Encodings.Web">
-            <HintPath>packages/System.Text.Encodings.Web.10.0.11/lib/net462/System.Text.Encodings.Web.dll</HintPath>
-        </Reference>
-        <Reference Include="System.Text.Json">
-            <HintPath>packages/System.Text.Json.10.0.11/lib/net462/System.Text.Json.dll</HintPath>
+        <Reference Include="System.Net.Http">
+            <HintPath>$(VALHEIM_MANAGED)/System.Net.Http.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="System" />
         <Reference Include="System.ComponentModel.Composition" />
@@ -231,9 +229,6 @@
             <Private>True</Private>
         </Reference>
         <Reference Include="System.Numerics" />
-        <Reference Include="System.Numerics.Vectors, Version=4.1.6.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-            <HintPath>packages\System.Numerics.Vectors.4.6.1\lib\net462\System.Numerics.Vectors.dll</HintPath>
-        </Reference>
         <Reference Include="System.Reflection, Version=4.1.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
             <Private>True</Private>
             <Private>True</Private>
@@ -242,8 +237,9 @@
             <Private>True</Private>
             <Private>True</Private>
         </Reference>
-        <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=6.0.3.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-            <HintPath>packages\System.Runtime.CompilerServices.Unsafe.6.1.2\lib\net462\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+        <Reference Include="System.Runtime.CompilerServices.Unsafe">
+            <HintPath>$(VALHEIM_MANAGED)\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+            <Private>False</Private>
         </Reference>
         <Reference Include="System.Runtime.Extensions, Version=4.1.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
             <Private>True</Private>
@@ -554,7 +550,57 @@
         </Reference>
     </ItemGroup>
     <ItemGroup>
-        <VlcWindowsX64IncludeFiles Include="libvlc.dll;libvlccore.dll;plugins\%2A%2A;lua\%2A%2A;hrtfs\%2A%2A" />
+        <!-- Curated LibVLC payload: only the modules the YouTube decoder path resolves
+             (https access + TLS, avformat demux/decode, vmem RV32 video, amem S16N audio).
+             The full plugin tree is 97 MB; this set is 25 MB. Adding a media path means
+             adding its modules here. lua and hrtfs are not used. -->
+        <VlcWindowsX64IncludeFiles Include="libvlc.dll" />
+        <VlcWindowsX64IncludeFiles Include="libvlccore.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\access\libfilesystem_plugin.dll" />
+        <!-- imem backs the chunked reader that feeds LibVLC through callbacks. -->
+        <VlcWindowsX64IncludeFiles Include="plugins\access\libimem_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\access\libaccess_imem_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\access\libhttp_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\access\libhttps_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\audio_filter\libaudio_format_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\audio_filter\libscaletempo_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\audio_filter\libsimple_channel_mixer_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\audio_filter\libspeex_resampler_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\audio_filter\libtrivial_channel_mixer_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\audio_filter\libugly_resampler_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\audio_mixer\libfloat_mixer_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\audio_mixer\libinteger_mixer_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\audio_output\libamem_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\codec\libaraw_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\codec\libavcodec_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\codec\libflac_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\codec\libmpg123_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\codec\libopus_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\codec\libvorbis_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\demux\libes_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\demux\libh26x_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\demux\libmp4_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\demux\libogg_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\demux\libwav_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\misc\libgnutls_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\packetizer\libpacketizer_copy_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\packetizer\libpacketizer_flac_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\packetizer\libpacketizer_h264_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\packetizer\libpacketizer_hevc_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\packetizer\libpacketizer_mpeg4audio_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\packetizer\libpacketizer_mpegaudio_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\stream_filter\libcache_block_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\stream_filter\libcache_read_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\stream_filter\libinflate_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\stream_filter\libprefetch_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\stream_filter\libskiptags_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\video_chroma\libchain_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\video_chroma\libi420_rgb_mmx_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\video_chroma\libi420_rgb_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\video_chroma\libi420_rgb_sse2_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\video_chroma\librv32_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\video_chroma\libswscale_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\video_output\libvmem_plugin.dll" />
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
     <Import Project="Publicize.targets" />

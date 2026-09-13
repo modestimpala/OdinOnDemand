@@ -5,16 +5,25 @@
 	<img src="https://i.imgur.com/tCQeHxN.png" />
 </p>
 
-Introducing OdinOnDemand 1.0: The Ultimate Media Experience for Valheim!
+Introducing OdinOnDemand 1.2: The Ultimate Media Experience for Valheim!
 
 OdinOnDemand (OOD) adds tons of unique mediaplayers to Valheim that allow you to watch YouTube, direct video files, listen to Soundcloud, music, and dynamic radio stations all on in-game screens and radios! It's fully multiplayer synced, low resource, and easy to use. 
 
-### 1.0 brings you a brand new experience with full time sync, new cart & belt player, linkable speakers, dynamic radio stations, new waveform visualizer and more! See documentation and changelog.
+### 1.2 updates OOD for Valheim 1.0 and is rebuilt on top of LibVLC: higher quality video, no more bad formats, and a new **Max Quality** setting. See below and changelog for more.
 
-Please enjoy OdinOnDemand 1.0!
-Moddy
+### What's new in 1.2
+
+- **Valheim 1.0 support** - updated for the latest version of the game. The **OdinOnDemand** build-menu group (category) is back, rebuilt on 1.0's new usage-tag system.
+- **VLC-powered streaming** - video and audio streams are decoded by a packaged **LibVLC 3.0.23** runtime and rendered into screens and audio sources. Quality is no longer limited to YouTube's old combined "muxed" formats, and nothing is downloaded, remuxed, or written to disk. Tested working on Proton too!
+- **Max Quality setting** - pick 360p through 2160p (1080p default) from the cog menu. Affects performance. 
+- **External JS status** - modern yt-dlp needs a JavaScript runtime to unlock full YouTube formats. The cog menu now tells you whether one was found and links the setup guide if not. This is really important for YouTube playback, so please check it if you have issues.
+
+Please enjoy OdinOnDemand 1.2!
+— Moddy
 
 Found a bug? -> [Nexus](https://www.nexusmods.com/valheim/mods/2229?tab=bugs) || [GitHub Issue Tracker](https://github.com/modestimpala/OdinOnDemand/issues)
+
+**About the VLC runtime:** OOD now runs with [LibVLC](https://www.videolan.org/vlc/libvlc.html) and [LibVLCSharp](https://code.videolan.org/videolan/LibVLCSharp) (LGPL 2.1+) alongside the plugin in `libvlc/win-x64`. It is self-contained, you don't need to install VLC yourself. This is a huge change in the way OOD handles YouTube playback, but it should be more reliable and higher quality than previously. However, if you have any issues with the new playback, please check your JavaScript runtime and see if it is working properly. If still having issues, please report them on [Nexus](https://www.nexusmods.com/valheim/mods/2229?tab=bugs) || [GitHub Issue Tracker](https://github.com/modestimpala/OdinOnDemand/issues) and include your BepInEx/LogOutput.log and Player.log files.
 
 *ValMedia recommends playing without bloom while watching cinema for the best viewing experience.* 
 
@@ -40,6 +49,7 @@ If you are enjoying the mod, please consider donating to my Ko-Fi.
   - Cart - "Bard's Wagon",  buildable. Used by pointing and clicking with remote control.
   - Belt - "Skald's Girdle", purchased from Haldor, with configurable recipe. Used by equipping & using remote control when pointing at empty space, e.g. not at a mediaplayer. Admins can point and click at other user's Belt and open it's menu.
 - YouTube playlist support
+- Wide website support: Vimeo, TikTok, Dailymotion, Facebook, Instagram, Twitter, reddit, etc. Just try your site of choice and it may return a valid file.
 - Unique dynamic radio stations system with easy radio addon support 
 - New Music Waveform Visualizer 
   - Configurable scaling factor
@@ -54,71 +64,16 @@ Please report any other issues on the [Nexus](https://www.nexusmods.com/valheim/
 
 Installation of the plugin is fairly straightforward, just install into Bepinex/plugins or use r2modman. **It must be installed on both server and client.**
 
-## Building
-
-The plugin targets .NET Framework 4.8 and can be built on Linux with the .NET SDK, Mono's reference assemblies, and NuGet. On Arch Linux, the tooling packages are `dotnet-sdk`, `dotnet-runtime`, `dotnet-targeting-pack`, `mono`, and `nuget`. Rebuilding the current YoutubeExplode fork requires SDK 10 (C# 14), even though its output targets `netstandard2.0` for Unity.
-
-1. Create a Valheim development profile in r2modman with BepInExPack_Valheim, Jotunn, and ValheimModding-JsonDotNET. Verify the profile launches before adding OdinOnDemand.
-2. Copy `plugin/Environment.props.example` to `plugin/Environment.props` and set the game and profile paths. On Linux the managed directory is case-sensitive: this installation uses `valheim_Data/Managed`.
-3. Restore and build from the repository root:
-
-   ```sh
-   nuget restore plugin/packages.config -PackagesDirectory plugin/packages
-   dotnet build plugin/OdinOnDemand.csproj --no-restore -c Release
-   ```
-
-The build automatically uses Mono's `/usr/lib/mono/4.8-api` reference assemblies when present. It uses the profile's BepInEx, Jotunn, and JsonDotNET DLLs and creates compile-time publicized game assemblies under `plugin/obj/publicized_assemblies`. No game files are changed.
-
-Both build configurations enable `AllowUnsafeBlocks`, which emits the permission Mono needs for access to publicized members. Publicizing the reference DLLs alone is not sufficient at runtime.
-
-To deploy to the `MOD_DEPLOYPATH` configured in `Environment.props`:
-
-```sh
-dotnet msbuild plugin/OdinOnDemand.csproj -t:Deploy -p:Configuration=Release
-```
-
-Exit the game before redeploying, then launch the same profile modded. Deployment includes the plugin and its private runtime dependencies, not Unity, BepInEx, Jotunn, Newtonsoft.Json, or publicized game assemblies. Valheim may load its own Newtonsoft.Json before JsonDotNET; use that shared assembly rather than shipping another copy. A plugin DLL's `app.config` does not control the game's assembly binding.
-
-### Custom media libraries
-
-Keep the custom DLLs in `plugin/Lib`; do not replace them with the public YoutubeExplode or YoutubeDLSharp NuGet packages.
-
-- `YoutubeDLSharp.dll`: [modestimpala/YoutubeDLSharp](https://github.com/modestimpala/YoutubeDLSharp), commit `b2f7968a2ef06a9c7b2c212785cfeac0b187b6d8`, built for `net45` with assembly version `1.1.1.0`. It uses Newtonsoft.Json 13.0.3, supplied at runtime by Valheim/JsonDotNET.
-- `YoutubeExplode.dll`: [modestimpala/YoutubeExplode](https://github.com/modestimpala/YoutubeExplode), fork commit `0b5cc1ec2a1fbe885195ef344c15844ff386aeeb` merged locally with upstream `prime` commit `5d7f8343e73ee8361474a9113e983dce2e8af2f3`. Remove the Deorcify package reference and central package version **before restore/build**. The local build also omits the CSharpier build hook. Build `netstandard2.0`; upstream internalizes AngleSharp and its helper libraries. System.Text.Json and its remaining runtime dependencies are separate packages listed in `plugin/packages.config`.
-- `SoundCloudExplode.dll`: the existing bundled custom build is retained.
-
-To reproduce the custom builds from their respective source repositories after applying the changes above:
-
-```sh
-# YoutubeDLSharp repository, Linux with Mono installed:
-dotnet build YoutubeDLSharp/YoutubeDLSharp.csproj -c Release -f net45 \
-  -p:TargetFrameworks=net45 -p:AssemblyVersion=1.1.1.0 \
-  -p:TargetFrameworkRootPath=/usr/lib/mono/xbuild-frameworks/ \
-  -p:FrameworkPathOverride=/usr/lib/mono/4.5-api \
-  -p:AutomaticallyUseReferenceAssemblyPackages=false
-
-# YoutubeExplode repository, SDK 10:
-dotnet build YoutubeExplode/YoutubeExplode.csproj -c Release -f netstandard2.0 \
-  -p:TargetFrameworks=netstandard2.0 -p:CopyLocalLockFileAssemblies=true
-```
-
-Copy only the resulting `YoutubeDLSharp.dll` and `YoutubeExplode.dll` into `plugin/Lib`; retain their license notices. Do not copy the fork build's Newtonsoft.Json over the profile's shared dependency.
 
 ### YouTube playback runtime
 
-The media player's cog menu includes **Use Nightly yt-dlp**, below **Admin Only** when that control is visible. This saves a client-side YouTube setting and passes `--update-to nightly` during local downloader setup and subsequent YouTube playback. It takes effect without restarting. Unchecking stops requesting nightly updates; it does not downgrade an already-installed nightly build. It does not affect a remote NodeJS server.
+YouTube playback uses yt-dlp (single videos), YoutubeExplode (playlists), and VLC (LibVLC); Pure Unity `VideoPlayer` is not really supported for YouTube anymore. Streams are decoded without downloading the complete file or requiring `ffmpeg.exe`.
 
-**Use Legacy YouTube Playback**, beside the nightly option, is an optional client-side compatibility mode, off by default. It requests local yt-dlp format **18** (360p H.264/AAC in one MP4) and uses Unity's `VideoPlayer` instead of initializing VLC. It overrides NodeJS extraction while enabled and takes effect on the next load or **Reload Player**, not mid-playback. If format 18 is unavailable, extraction fails rather than choosing another format. Unity must support the stream on that machine; the Proton smoke returned “Cannot read file” for this mode, while VLC playback worked.
+- **Use Nightly yt-dlp** requests nightly updates for local playback. Disabling it does not downgrade yt-dlp or affect a remote NodeJS server.
+- **Max Quality** caps resolution from 360p to 2160p (1080p default). Lower it to reduce software-decoding and frame-upload costs, especially with multiple players.
+- **External JS** shows the detected challenge-solving runtime. Install Deno 2.3+ beside `yt-dlp.exe`; Proton requires Windows x64 `deno.exe`. The plugin also searches `PATH` for Deno, Node, Bun, or QuickJS. Without one, **quality or audio availability may be limited**. See the [EJS setup guide](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
 
-Single-video playback currently uses YoutubeDLSharp/yt-dlp; playlists use YoutubeExplode. Current yt-dlp requires a JavaScript runtime for YouTube challenge solving. For the Windows game running under Proton, place **Windows x64 `deno.exe` (2.3 or newer)** beside `yt-dlp.exe` in the Valheim install directory. Installing a Linux Deno binary does not supply the Windows process with that executable. The official `yt-dlp.exe` already bundles the EJS scripts; see the [yt-dlp EJS setup guide](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
-
-By default, local yt-dlp requests use `youtube:player_client=default,web_embedded` and prefer separate HTTPS H.264 MP4 video and AAC M4A audio streams, falling back to a combined H.264/AAC MP4. That format fallback still uses **VLC**, not Unity; there is no automatic backend fallback in either mode. Quality is no longer restricted to YouTube's muxed formats or hard-coded format IDs. yt-dlp extracts metadata and direct URLs; the client streams and decodes them without a whole-file download, remux step, or `ffmpeg.exe`.
-
-Default high-quality playback requires the packaged **LibVLCSharp 3.10.1** and **LibVLC 3.0.23** runtime. The build/deployment target includes `LibVLCSharp.dll` and the complete `libvlc/win-x64/` directory beside `OdinOnDemand.dll`. Keep that directory structure on every client; copying only the plugin DLL is not sufficient. This runtime supports the **Windows x64 game, including Proton**. Building on Linux does not provide native Linux-game playback support. A separate VLC installation is not needed.
-
-Both streams share one decoder clock. Video is uploaded to the existing screen texture, and PCM goes through the existing Unity AudioSource, retaining its volume, mixer, and spatial-audio settings. Scheduling accounts for Unity's read-ahead and DSP buffers. Transport commands and network state retain the original URL and media position rather than distributing expiring stream URLs. Use the updated plugin and runtime on every client. A seek made while paused updates the requested position immediately and is applied to the native decoder on resume.
-
-Higher resolutions and simultaneous players increase decoding, memory, and frame-upload costs. Native buffers are bounded; playback does not cache the complete media file. Runtime license and source notices are included in `LibVLC.LICENSE.txt`.
+High-quality playback requires the packaged **LibVLCSharp 3.10.1**, **LibVLC 3.0.23**, and complete `libvlc/win-x64/` directory beside `OdinOnDemand.dll` on every client. Copying only the plugin DLL is not enough. 
 
 ## Use
 
@@ -281,66 +236,8 @@ For any tech-savvy Vikings out there, there is a backup YouTube api that can be 
 
 ## Acknowledgements
 
- - [SoundCloudExplode](https://github.com/jerry08/SoundCloudExplode) | [YouTubeExplode](https://github.com/Tyrrrz/YoutubeExplode) | [youtube-exec-dl](https://www.npmjs.com/package/youtube-dl-exec) | [nodejs](https://nodejs.org/en/) | [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+ - [SoundCloudExplode](https://github.com/jerry08/SoundCloudExplode) | [YouTubeExplode](https://github.com/Tyrrrz/YoutubeExplode) | [youtube-exec-dl](https://www.npmjs.com/package/youtube-dl-exec) | [nodejs](https://nodejs.org/en/) | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | [LibVLCSharp](https://code.videolan.org/videolan/LibVLCSharp) | [LibVLC](https://www.videolan.org/vlc/libvlc.html) 
  - Inspired by [Raft Cinema Mod](https://www.raftmodding.com/mods/cinema-mod)
  - Special shoutout to the [Valhalla server](https://valheim.thunderstore.io/package/FreyaValhalla/Valhalla_Dedicated/) Community and Administration
  - Any and all other project supporters - thanks for all the interest and support along the way.
 
-## NodeJS Server Installation
-
-### NodeJS Server has not been updated in a long time may not work properly 
-
-No need to use an external server now, but it's still there if you want it. yt-dlp may often return more consistently and with better quality videos. 
-There is also the self-hosted benefit.
-
-To expose NodeJS server config settings, set API type to NodeJS and run the plugin once. It will populate your config with new settings to allow setup of NodeJS. We hide these to avoid player confusion when using YoutubeExplode. 
-
-[Tutorial Video](https://www.youtube.com/watch?v=9_vs8MItO38)
-
-Setup of YouTube functionality is a little more involved. 
-After multiple attempts I could not get any YouTube library to work so we're grabbing
-YouTube links through 
-[youtube-exec-dl](https://www.npmjs.com/package/youtube-dl-exec) which uses
-[nodejs](https://nodejs.org/en/) to interact with
-[yt-dlp](https://github.com/yt-dlp/yt-dlp). This solution is not great so see notes if you might have any ideas.
-
-First you will need nodejs installed on a computer. Then you will need to install youtube-dl-exec and express with
-```bash
-npm install youtube-dl-exec --save
-npm install express --save
-```
-Then in the working directory, place server.js and start.sh from the release zip. You can find this on github or Nexus.
-You can configure the server's port through 
-```
-const port = process.env.PORT || 3000;
-```
-You must change the auth code at the top of the file. Generate one of a reasonable length [here](https://generate.plus/en/base64).
-```
-const authString = "CHANGEME=";
-```
-In the working directory execute 
-```bash
-./start.sh
-or
-node server.js
-```
-This will start the server and first command enables logging. It logs messages 
-into log.txt and errors into err.txt, then follows the output of log.txt.
- 
-Then configure YouTube in the mod config through either an in-game GUI plugin 
-or by modifying the appropriate values in BepInEx\config\com.donkboys.OdinOnDemand.cfg.
-
-Is Youtube Enabled must be "true". The NodeJS URL must be set to your server like:
-```
-http://127.0.0.1:8080/yt/
-```
-Replace the IP and port with your server's IP and port. 
-Set your auth code identical to the one in server.js.
-
-The server does not actually download any files, just returns urls.
-
-Keep in mind this server is very barebones but at least has basic error handling,
-input sanitization and authentication. It does not yet fully handle crashes, so if the node server 
-somehow fails to catch an exception and exits it will not auto-restart.
-Additionally, please practice good saftey standards when opening up a server application
-to the internet. You could alternatively use a program like ZeroTier to avoid exposing a port publicly. 

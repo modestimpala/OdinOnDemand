@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using Newtonsoft.Json.Linq;
@@ -15,10 +16,18 @@ namespace OdinOnDemand.Utils.Net.Explode
         public string VideoUrl { get; }
         public string AudioUrl { get; }
 
-        public YoutubeStreams(string videoUrl, string audioUrl = null)
+        /// <summary>
+        ///     Request headers yt-dlp used for the extraction. YouTube ties some stream URLs to the
+        ///     requesting client, so replaying them verbatim avoids 403s.
+        /// </summary>
+        public IDictionary<string, string> Headers { get; }
+
+        public YoutubeStreams(string videoUrl, string audioUrl = null,
+            IDictionary<string, string> headers = null)
         {
             VideoUrl = videoUrl;
             AudioUrl = audioUrl;
+            Headers = headers ?? new Dictionary<string, string>();
         }
     }
 
@@ -40,18 +49,22 @@ namespace OdinOnDemand.Utils.Net.Explode
             {
                 string videoUrl = null;
                 string audioUrl = null;
+                JToken videoFormat = null;
                 foreach (var format in formats)
                 {
                     var url = (string)format["url"];
                     var videoCodec = (string)format["vcodec"];
                     var audioCodec = (string)format["acodec"];
                     if (videoCodec != null && videoCodec != "none" && audioCodec == "none")
+                    {
                         videoUrl = url;
+                        videoFormat = format;
+                    }
                     else if (audioCodec != null && audioCodec != "none" && videoCodec == "none")
                         audioUrl = url;
                 }
                 if (IsStreamUrl(videoUrl) && IsStreamUrl(audioUrl))
-                    return new YoutubeStreams(videoUrl, audioUrl);
+                    return new YoutubeStreams(videoUrl, audioUrl, ParseHeaders(videoFormat, json));
             }
             else
             {
@@ -60,9 +73,28 @@ namespace OdinOnDemand.Utils.Net.Explode
                 var audioCodec = (string)json["acodec"];
                 if (IsStreamUrl(url) && !string.IsNullOrEmpty(videoCodec) && videoCodec != "none" &&
                     !string.IsNullOrEmpty(audioCodec) && audioCodec != "none")
-                    return new YoutubeStreams(url);
+                    return new YoutubeStreams(url, null, ParseHeaders(json, json));
             }
             throw new FormatException("yt-dlp did not return a complete video/audio stream selection.");
+        }
+
+        /// <summary>
+        ///     Reads the per-format request headers, falling back to the extraction-wide ones.
+        /// </summary>
+        private static IDictionary<string, string> ParseHeaders(JToken format, JToken root)
+        {
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var source = (format != null ? format["http_headers"] : null) as JObject ??
+                         root["http_headers"] as JObject;
+            if (source == null) return headers;
+
+            foreach (var header in source.Properties())
+            {
+                var value = (string)header.Value;
+                if (!string.IsNullOrEmpty(value)) headers[header.Name] = value;
+            }
+
+            return headers;
         }
 
         private static bool IsStreamUrl(string url)
@@ -92,6 +124,7 @@ namespace OdinOnDemand.Utils.Net.Explode
             }
 
             Ytdl = new YoutubeDL { YoutubeDLPath = YtDlpPath };
+            ExternalJsRuntime.Refresh();
             UpdateOptions.UpdateTo = OODConfig.UseNightlyYtDlp.Value ? "nightly" : null;
             // Updating is best-effort; extraction also applies the selected nightly channel.
             var update = Ytdl.RunWithOptions(Array.Empty<string>(), UpdateOptions, CancellationToken.None);
@@ -106,7 +139,7 @@ namespace OdinOnDemand.Utils.Net.Explode
             onComplete?.Invoke(true);
         }
 
-        public IEnumerator GetStreams(string url, Action<YoutubeStreams> onComplete, int timeoutSeconds = DefaultTimeoutSeconds, bool legacyPlayback = false)
+        public IEnumerator GetStreams(string url, Action<YoutubeStreams> onComplete, int timeoutSeconds = DefaultTimeoutSeconds)
         {
             if (Ytdl == null)
             {
@@ -120,16 +153,25 @@ namespace OdinOnDemand.Utils.Net.Explode
             }
 
             using var cts = new CancellationTokenSource();
+            // Software decoding and the per-frame CPU upload scale with resolution, so the height
+            // cap is the difference between smooth playback and a stalled game.
+            var maxHeight = OODConfig.MaxVideoHeight.Value;
+            var heightFilter = $"[height<={maxHeight}]";
             // Keep selection request-local: a reload can overlap an older extraction.
             var options = new OptionSet
             {
                 ExtractorArgs = "youtube:player_client=default,web_embedded",
-                Format = legacyPlayback ? "18" :
-                    "bestvideo[ext=mp4][vcodec^=avc1][protocol=https]+bestaudio[ext=m4a][acodec^=mp4a][protocol=https]/best[ext=mp4][vcodec^=avc1][acodec^=mp4a][protocol=https]",
+                Format =
+                    $"bestvideo[ext=mp4][vcodec^=avc1][protocol=https]{heightFilter}+bestaudio[ext=m4a][acodec^=mp4a][protocol=https]/" +
+                    $"best[ext=mp4][vcodec^=avc1][acodec^=mp4a][protocol=https]{heightFilter}/" +
+                    "bestvideo[ext=mp4][vcodec^=avc1][protocol=https]+bestaudio[ext=m4a][acodec^=mp4a][protocol=https]",
                 DumpSingleJson = true,
                 NoPlaylist = true,
                 UpdateTo = OODConfig.UseNightlyYtDlp.Value ? "nightly" : null
             };
+            // Only deno is enabled by default; point yt-dlp at any other runtime we located.
+            var jsRuntimes = ExternalJsRuntime.JsRuntimesArgument;
+            if (jsRuntimes != null) options.AddCustomOption("--js-runtimes", jsRuntimes);
             var operation = Ytdl.RunWithOptions(new[] { url }, options, cts.Token);
             try
             {
@@ -150,6 +192,7 @@ namespace OdinOnDemand.Utils.Net.Explode
                 try
                 {
                     var result = operation.GetAwaiter().GetResult();
+                    ExternalJsRuntime.InspectYtDlpOutput(result.ErrorOutput);
                     if (result.Success)
                         streams = ParseStreams(string.Join("\n", result.Data));
                     else
@@ -168,12 +211,12 @@ namespace OdinOnDemand.Utils.Net.Explode
             }
         }
 
-        public IEnumerator GetStreamsWithRetry(string url, Action<YoutubeStreams> onComplete, int maxRetries = 3, int timeoutSeconds = DefaultTimeoutSeconds, bool legacyPlayback = false)
+        public IEnumerator GetStreamsWithRetry(string url, Action<YoutubeStreams> onComplete, int maxRetries = 3, int timeoutSeconds = DefaultTimeoutSeconds)
         {
             for (int i = 0; i < maxRetries; i++)
             {
                 YoutubeStreams result = null;
-                yield return GetStreams(url, streams => result = streams, timeoutSeconds, legacyPlayback);
+                yield return GetStreams(url, streams => result = streams, timeoutSeconds);
                 if (result != null)
                 {
                     onComplete?.Invoke(result);

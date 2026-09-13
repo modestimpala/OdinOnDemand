@@ -3,20 +3,47 @@
 
 ### Versions:
 
-## Unreleased
- - Added Linux build configuration, automatic build-local assembly publicization, and an explicit r2modman deployment target.
- - Updated hover interfaces, remote-control equipment hashes, and the placement Harmony target for Valheim 1.0.
- - Enabled Mono's required publicized-member access permission in Release as well as Debug.
- - Switched YoutubeDLSharp to the custom fork and updated the custom YoutubeExplode build with upstream changes, excluding Deorcify.
- - Kept Newtonsoft.Json shared with Valheim/JsonDotNET and included the extractor's separate System.Text.Json runtime dependencies.
- - Added a persisted client-side **Use Nightly yt-dlp** checkbox to the media player's cog menu, enabling `--update-to nightly` for the local downloader.
- - Replaced hard-coded YouTube format IDs with split-first H.264/AAC HTTPS selection using the default and embedded clients, with a muxed fallback.
- - Added packaged Windows x64 LibVLC streaming playback for separate video/audio streams, including Proton, without downloading or remuxing whole media files.
- - Routed decoded frames and PCM through the existing Unity outputs, fixing a native audio buffer over-read and accounting for timestamp rounding, Unity read-ahead, and DSP latency.
- - Unified YouTube transport, loop/playlist transitions, pending seeks, and source replacement around the decoder clock; stale extraction results cannot restart a stopped player.
- - Fixed RPC paused-state deserialization and applied transmitted positions to play/pause commands.
- - Added an optional client-side **Use Legacy YouTube Playback** cog setting: local yt-dlp format 18 through Unity, applied on the next load, with no automatic backend fallback.
- - Preserved SoundCloud/relative-audio artwork, gramophone end animation, synchronized station continuation timers, and direct extensionless URLs when YouTube extraction is disabled.
+## 1.2.0
+ - Updated interfaces, equipment hashes, and Harmony placement support for Valheim 1.0; restored the **OdinOnDemand** build-menu group using usage tags.
+ - Added cog settings for **Max Quality** (360p-2160p, default 1080p) and persisted **Use Nightly yt-dlp**, plus a fixed-height, scrollable settings layout.
+ - Added **External JS** runtime status, setup guidance, yt-dlp warnings, and `--js-runtimes` support for node, bun, and qjs.
+ - Improved YouTube playback with bounded HTTP range requests, split-first H.264/AAC format selection, untouched signed URLs, and clearer unavailable-media errors.
+ - Added packaged Windows x64 LibVLC streaming for separate video/audio, including Proton, without full downloads or remuxing.
+ - Shared one LibVLC instance across players and reduced packaged modules from 101 MB to 28 MB; replace the entire `libvlc` folder when updating.
+ - Improved Unity video/audio output, fixing a native buffer over-read and playback timing issues.
+ - Unified playback, seeking, looping, playlists, and source changes around the decoder clock, preventing stale extraction results from restarting stopped players.
+ - Fixed RPC pause/position synchronization while preserving artwork, gramophone animations, station timers, and direct extensionless URLs.
+ - Migrated YoutubeExplode from System.Text.Json to Newtonsoft.Json.
+
+## 1.0.11
+
+- Update/remove dependencies, switch to JsonDotNET 
+
+## 1.0.10
+
+- Fixed log spam
+- Fixed YT and other video playback
+
+## 1.0.9
+
+- Revised VIP Rank System to not hard reference Steamworks
+  - This should allow Xbox users to run the mod properly.
+- Fixed remote control component
+- Added auto-update for Yt-dlp DLSharp extension
+
+## 1.0.8
+ - Supplemented broken YouTubeExplode commands with YoutubeDLSharp
+	- As a side effect, you can now grab videos from a wide variety of sites: vimeo, TikTok, dailymotion, facebook, Instagram, twitter, reddit, etc. Just try your site of choice and it may return a valid file.
+	- On the flip side, YouTube videos are now limited to 360p due to scarce muxed video options 
+ - Fixed SoundcloudExplode 401 errors
+ - Fixed PlacePiecePatch 
+
+## 1.0.7
+ - Fix Relative URL Lookup
+ - Fix Loop UI Text
+ - Remote Controller support for ValheimRAFT, and any other similar mods
+ - Fix Relative Video loading prepare
+ - Potential URL fix for foreign languages
 
 ## 1.0.6
  - Fixed crash when attempting to listen to SoundCloud links

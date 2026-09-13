@@ -30,6 +30,17 @@ namespace OdinOnDemand.Utils.Net.Explode
                     return default; // Return the default value for type T if the task is canceled.
                 }
 
+                // A 404 from the extractor means the track/video itself is gone or restricted,
+                // not that the plugin misbehaved; say so instead of only dumping the stack.
+                if (ex is System.Net.Http.HttpRequestException && ex.Message.Contains("404"))
+                {
+                    Logger.LogError(
+                        "The requested media is not available (404). The track or video is private, " +
+                        "region locked, deleted, or not streamable for this account.");
+                    Logger.LogDebug(ex);
+                    return default;
+                }
+
                 Logger.LogError($"Exception caught in ExecuteSafeAsync: {ex}");
                 return default; // Return the default value for type T if an exception occurs.
             }

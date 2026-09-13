@@ -7,6 +7,7 @@ using OdinOnDemand.Dynamic;
 using OdinOnDemand.MPlayer;
 using OdinOnDemand.Utils.Config;
 using OdinOnDemand.Utils.Net;
+using OdinOnDemand.Utils.Net.Explode;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
@@ -46,7 +47,9 @@ namespace OdinOnDemand.Utils.UI
         private Slider _volumeSliderDynamic;
         private Toggle _adminOnlyToggle;
         private Toggle _nightlyYtDlpToggle;
-        private Toggle _legacyYoutubeToggle;
+        private Text _maxHeightLabel;
+        private Text _externalJsStatusText;
+        private GameObject _externalJsGuideButtonObj;
         internal Image RadioPanelThumbnail;
         
         private ToggleGroup _entryToggleGroup;
@@ -584,7 +587,8 @@ namespace OdinOnDemand.Utils.UI
                     : OODConfig.MasterVolumeMusicplayer.Value;
                 if (_adminOnlyToggle) _adminOnlyToggle.isOn = _basePlayer.PlayerSettings.AdminOnly;
                 if (_nightlyYtDlpToggle) _nightlyYtDlpToggle.SetIsOnWithoutNotify(OODConfig.UseNightlyYtDlp.Value);
-                if (_legacyYoutubeToggle) _legacyYoutubeToggle.SetIsOnWithoutNotify(OODConfig.UseLegacyYoutubePlayback.Value);
+                if (_maxHeightLabel) _maxHeightLabel.text = MaxHeightLabelText();
+                UpdateExternalJsStatus();
             }
             UpdateSpeakerCount();
             _settingsPanelObj.SetActive(_basePlayer.PlayerSettings.IsSettingsGuiActive);
@@ -595,358 +599,380 @@ namespace OdinOnDemand.Utils.UI
             if(_speakerText) _speakerText.text = "Speakers: " + _basePlayer.mSpeakers.Count;
         }
 
-        private void CreateSettingsGUI(bool  adminOnlyEnabled = true, 
+        private const float SettingsRowInset = 10f;
+
+        private void CreateSettingsGUI(bool adminOnlyEnabled = true,
             bool audioDistanceEnabled = true, bool verticalDropOffEnabled = true)
         {
-            if (_settingsPanelObj == null)
+            if (_settingsPanelObj != null) return;
+
+            if (GUIManager.Instance == null)
             {
-                if (GUIManager.Instance == null)
-                {
-                    Logger.LogDebug("GUIManager instance is null");
-                    return;
-                }
+                Logger.LogDebug("GUIManager instance is null");
+                return;
+            }
 
-                if (!GUIManager.CustomGUIFront)
-                {
-                    Logger.LogDebug("GUIManager CustomGUI is null");
-                    return;
-                }
+            if (!GUIManager.CustomGUIFront)
+            {
+                Logger.LogDebug("GUIManager CustomGUI is null");
+                return;
+            }
 
-                ///////////////////////////////
-                /// MAIN SCROLLVIEW OBJECT ///
-                _settingsPanelObj = DefaultControls.CreateScrollView(_oodResources);
-                _settingsPanelRT = _settingsPanelObj.GetComponent<RectTransform>();
-                var selectionPanelRT = URLPanelObj.GetComponent<RectTransform>();
-                _settingsPanelObj.transform.SetParent(URLPanelObj.transform, false);
+            ///////////////////////////////
+            /// MAIN SCROLLVIEW OBJECT ///
+            _settingsPanelObj = DefaultControls.CreateScrollView(_oodResources);
+            _settingsPanelRT = _settingsPanelObj.GetComponent<RectTransform>();
+            var selectionPanelRT = URLPanelObj.GetComponent<RectTransform>();
+            _settingsPanelObj.transform.SetParent(URLPanelObj.transform, false);
 
-                _settingsPanelRT.anchorMin = new Vector2(0.5f, 0.5f);
-                _settingsPanelRT.anchorMax = new Vector2(0.5f, 0.5f);
-                _settingsPanelRT.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,
-                    selectionPanelRT.sizeDelta.x / 1.15f);
-                _settingsPanelRT.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,
-                    selectionPanelRT.sizeDelta.y / 1.15f);
-                _settingsPanelRT.anchoredPosition = new Vector2(0, 0);
+            _settingsPanelRT.anchorMin = new Vector2(0.5f, 0.5f);
+            _settingsPanelRT.anchorMax = new Vector2(0.5f, 0.5f);
+            _settingsPanelRT.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,
+                selectionPanelRT.sizeDelta.x - 24f);
+            _settingsPanelRT.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,
+                selectionPanelRT.sizeDelta.y - 20f);
+            _settingsPanelRT.anchoredPosition = new Vector2(0, 0);
 
-                var scrollviewBg = _settingsPanelObj.GetComponent<Image>();
-                scrollviewBg.color = new Color(0, 0, 0, 0.95f);
-                var scrollRect = _settingsPanelObj.GetComponent<ScrollRect>();
-                scrollRect.vertical = true;
-                scrollRect.horizontal = false;
-                scrollRect.elasticity = 0.01f;
-                scrollRect.scrollSensitivity = 20;
-                scrollRect.horizontalScrollbar = null;
-                scrollRect.verticalScrollbar = null;
-                _settingsPanelObj.transform.Find("Scrollbar Horizontal").gameObject.SetActive(false);
-                _settingsPanelObj.transform.Find("Scrollbar Vertical").gameObject.SetActive(false);
-                
-                _settingsPanelObj.SetActive(false);
-                var contentTransform = _settingsPanelObj.transform.Find("Viewport/Content");
-                var verticalLayoutGroup = contentTransform.gameObject.AddComponent<VerticalLayoutGroup>();
-                verticalLayoutGroup.childForceExpandWidth = true;
-                verticalLayoutGroup.childForceExpandHeight = true;
-                verticalLayoutGroup.childControlWidth = true;
-                verticalLayoutGroup.childControlHeight = true;
-                verticalLayoutGroup.childScaleHeight = true;
-                verticalLayoutGroup.childScaleWidth = true;
-                verticalLayoutGroup.spacing = 5f;
-                
-                //////////////////////////
-                /// ADMIN ONLY TOGGLE ///
-                if (SynchronizationManager.Instance.PlayerIsAdmin && adminOnlyEnabled)
-                {
-                    /// toggle
-                    var adminOnlyToggleObj = DefaultControls.CreateToggle(_oodResources);
-                    adminOnlyToggleObj.transform.SetParent(contentTransform, false);
-                    var t = adminOnlyToggleObj.transform.Find("Label").GetComponent<Text>();
-                    _adminOnlyToggle = adminOnlyToggleObj.GetComponent<Toggle>();
-                    _adminOnlyToggle.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
-                    _adminOnlyToggle.isOn = _basePlayer.PlayerSettings.AdminOnly;
-                    _adminOnlyToggle.onValueChanged.AddListener(OnAdminOnlyToggleChanged);
-                    GUIManager.Instance.ApplyTextStyle(t, GUIManager.Instance.AveriaSerifBold,
-                        GUIManager.Instance.ValheimOrange);
-                    _adminOnlyToggle.transform.Find("Background").GetComponent<RectTransform>().sizeDelta =
-                        new Vector2(16, 16);
-                    _adminOnlyToggle.transform.Find("Background/Checkmark").GetComponent<RectTransform>().sizeDelta =
-                        new Vector2(16, 16);
-                    t.text = "Admin Only";
-                }
+            var scrollviewBg = _settingsPanelObj.GetComponent<Image>();
+            scrollviewBg.color = new Color(0, 0, 0, 0.95f);
+            var scrollRect = _settingsPanelObj.GetComponent<ScrollRect>();
+            scrollRect.vertical = true;
+            scrollRect.horizontal = false;
+            scrollRect.elasticity = 0.01f;
+            scrollRect.scrollSensitivity = 20;
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
+            scrollRect.horizontalScrollbar = null;
+            _settingsPanelObj.transform.Find("Scrollbar Horizontal").gameObject.SetActive(false);
 
-                var nightlyToggleObj = DefaultControls.CreateToggle(_oodResources);
-                nightlyToggleObj.transform.SetParent(contentTransform, false);
-                _nightlyYtDlpToggle = nightlyToggleObj.GetComponent<Toggle>();
-                _nightlyYtDlpToggle.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
-                _nightlyYtDlpToggle.isOn = OODConfig.UseNightlyYtDlp.Value;
-                _nightlyYtDlpToggle.onValueChanged.AddListener(OnNightlyYtDlpToggleChanged);
-                var nightlyLabel = nightlyToggleObj.transform.Find("Label").GetComponent<Text>();
-                GUIManager.Instance.ApplyTextStyle(nightlyLabel, GUIManager.Instance.AveriaSerifBold,
-                    GUIManager.Instance.ValheimOrange);
-                nightlyToggleObj.transform.Find("Background").GetComponent<RectTransform>().sizeDelta =
-                    new Vector2(16, 16);
-                nightlyToggleObj.transform.Find("Background/Checkmark").GetComponent<RectTransform>().sizeDelta =
-                    new Vector2(16, 16);
-                nightlyLabel.text = "Use Nightly yt-dlp";
+            // The settings list is several times taller than the view, so the scrollbar stays.
+            var verticalScrollbarObj = _settingsPanelObj.transform.Find("Scrollbar Vertical").gameObject;
+            verticalScrollbarObj.SetActive(true);
+            var verticalScrollbarRT = verticalScrollbarObj.GetComponent<RectTransform>();
+            verticalScrollbarRT.sizeDelta = new Vector2(10f, verticalScrollbarRT.sizeDelta.y);
+            scrollRect.verticalScrollbar = verticalScrollbarObj.GetComponent<Scrollbar>();
+            scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+            var viewportRT = _settingsPanelObj.transform.Find("Viewport").GetComponent<RectTransform>();
+            viewportRT.offsetMax = new Vector2(-12f, viewportRT.offsetMax.y);
 
-                var legacyToggleObj = DefaultControls.CreateToggle(_oodResources);
-                legacyToggleObj.transform.SetParent(contentTransform, false);
-                _legacyYoutubeToggle = legacyToggleObj.GetComponent<Toggle>();
-                _legacyYoutubeToggle.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
-                _legacyYoutubeToggle.isOn = OODConfig.UseLegacyYoutubePlayback.Value;
-                _legacyYoutubeToggle.onValueChanged.AddListener(OnLegacyYoutubeToggleChanged);
-                var legacyLabel = legacyToggleObj.transform.Find("Label").GetComponent<Text>();
-                GUIManager.Instance.ApplyTextStyle(legacyLabel, GUIManager.Instance.AveriaSerifBold,
-                    GUIManager.Instance.ValheimOrange);
-                legacyToggleObj.transform.Find("Background").GetComponent<RectTransform>().sizeDelta =
-                    new Vector2(16, 16);
-                legacyToggleObj.transform.Find("Background/Checkmark").GetComponent<RectTransform>().sizeDelta =
-                    new Vector2(16, 16);
-                legacyLabel.text = "Use Legacy YouTube Playback";
+            _settingsPanelObj.SetActive(false);
 
-                /////////////////////////////
-                /// AUDIO DISTANCE PANEL ///
-                if (audioDistanceEnabled)
-                {
-                    var panelDistance = DefaultControls.CreatePanel(_oodResources);
-                    panelDistance.transform.SetParent(contentTransform, false);
-                    panelDistance.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 85);
-                    var imageDistance = panelDistance.GetComponent<Image>();
-                    imageDistance.color = new Color(imageDistance.color.r, imageDistance.color.g, imageDistance.color.b, 0.0155f);
+            var contentTransform = _settingsPanelObj.transform.Find("Viewport/Content");
+            var verticalLayoutGroup = contentTransform.gameObject.AddComponent<VerticalLayoutGroup>();
+            verticalLayoutGroup.padding = new RectOffset(6, 6, 6, 6);
+            verticalLayoutGroup.spacing = 4f;
+            verticalLayoutGroup.childAlignment = TextAnchor.UpperCenter;
+            verticalLayoutGroup.childControlWidth = true;
+            verticalLayoutGroup.childForceExpandWidth = true;
+            // Every row states its own height through a LayoutElement. Force-expanding heights
+            // instead splits the viewport between the rows, which collapses each one to a few
+            // pixels and truncates the text inside it.
+            verticalLayoutGroup.childControlHeight = true;
+            verticalLayoutGroup.childForceExpandHeight = false;
+            verticalLayoutGroup.childScaleWidth = false;
+            verticalLayoutGroup.childScaleHeight = false;
+            var contentFitter = contentTransform.gameObject.AddComponent<ContentSizeFitter>();
+            contentFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            contentFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-                    GUIManager.Instance.CreateText(
-                        "Listening Distance",
-                        panelDistance.transform,
-                        new Vector2(0.5f, 0.5f),
-                        new Vector2(0.5f, 0.5f),
-                        new Vector2(8f, 10f),
-                        GUIManager.Instance.AveriaSerifBold,
-                        12,
-                        GUIManager.Instance.ValheimOrange,
-                        true,
-                        Color.black,
-                        120f,
-                        18f,
-                        false);
-                    var str = _basePlayer.mAudio.maxDistance.ToString(CultureInfo.CurrentCulture);
-                    var inputObj = GUIManager.Instance.CreateInputField(
-                        panelDistance.transform,
-                        new Vector2(0.5f, 0.5f),
-                        new Vector2(0.5f, 0.5f),
-                        new Vector2(0f, -10f),
-                        InputField.ContentType.Standard,
-                        str,
-                        14,
-                        110f,
-                        26f);
-                    var input = inputObj.GetComponent<InputField>();
-                    input.contentType = InputField.ContentType.DecimalNumber;
-                    input.onEndEdit.AddListener(OnAudioDistanceInputEndEdit);
-                }
-                ////////////////////////////
-                /// MASTER VOLUME PANEL ///
-                var panel = DefaultControls.CreatePanel(_oodResources);
-                panel.transform.SetParent(contentTransform, false);
-                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 85);
-                var image = panel.GetComponent<Image>();
-                image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
+            //////////////////////////
+            /// TOGGLES ///
+            if (SynchronizationManager.Instance.PlayerIsAdmin && adminOnlyEnabled)
+                _adminOnlyToggle = CreateSettingsToggle(contentTransform, "Admin Only",
+                    _basePlayer.PlayerSettings.AdminOnly, OnAdminOnlyToggleChanged);
 
-                GUIManager.Instance.CreateText(
-                    "Master Volume",
-                    panel.transform,
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(8f, 6f),
-                    GUIManager.Instance.AveriaSerifBold,
-                    12,
-                    GUIManager.Instance.ValheimOrange,
-                    true,
-                    Color.black,
-                    120f,
-                    18f,
-                    false);
-                var sliderObj = DefaultControls.CreateSlider(_oodResources);
-                sliderObj.transform.SetParent(panel.transform, false);
-                sliderObj.transform.localPosition = new Vector2(0, -10);
-                var sliderRT = sliderObj.GetComponent<RectTransform>();
-                sliderRT.localScale = new Vector3(0.65f, 1, 1);
-                _masterVolumeSliderComponent = sliderObj.GetComponent<Slider>();
-                _masterVolumeSliderComponent.maxValue = 15f;
-                _masterVolumeSliderComponent.minValue = -15f;
-                _masterVolumeSliderComponent.value = _basePlayer.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen
+            _nightlyYtDlpToggle = CreateSettingsToggle(contentTransform, "Use Nightly yt-dlp",
+                OODConfig.UseNightlyYtDlp.Value, OnNightlyYtDlpToggleChanged);
+
+            /////////////////////////////
+            /// VIDEO QUALITY ROW ///
+            var qualityRow = CreateSettingsRow(contentTransform, 34f);
+            _maxHeightLabel = CreateRowLabel(qualityRow, MaxHeightLabelText(), 170f);
+            var qualityButton = CreateRowButton(qualityRow, "Change", 110f, SettingsRowInset);
+            qualityButton.onClick.AddListener(CycleMaxVideoHeight);
+
+            /////////////////////////////
+            /// AUDIO DISTANCE ROW ///
+            if (audioDistanceEnabled)
+            {
+                var distanceRow = CreateSettingsRow(contentTransform, 34f);
+                CreateRowLabel(distanceRow, "Listening Distance", 150f);
+                var distanceInput = CreateRowInput(distanceRow,
+                    _basePlayer.mAudio.maxDistance.ToString(CultureInfo.CurrentCulture), 110f, SettingsRowInset);
+                distanceInput.onEndEdit.AddListener(OnAudioDistanceInputEndEdit);
+            }
+
+            ////////////////////////////
+            /// MASTER VOLUME ROW ///
+            var volumeRow = CreateSettingsRow(contentTransform, 34f);
+            CreateRowLabel(volumeRow, "Master Volume", 130f);
+            var sliderObj = DefaultControls.CreateSlider(_oodResources);
+            sliderObj.transform.SetParent(volumeRow.transform, false);
+            sliderObj.GetComponent<RectTransform>().sizeDelta = new Vector2(150f, 18f);
+            AnchorRight(sliderObj, SettingsRowInset);
+            _masterVolumeSliderComponent = sliderObj.GetComponent<Slider>();
+            _masterVolumeSliderComponent.maxValue = 15f;
+            _masterVolumeSliderComponent.minValue = -15f;
+            _masterVolumeSliderComponent.value =
+                _basePlayer.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen
                     ? OODConfig.MasterVolumeScreen.Value
                     : OODConfig.MasterVolumeMusicplayer.Value;
-                _masterVolumeSliderComponent.onValueChanged.AddListener(OnMasterVolumeChanged);
-                
-                //////////////////////////////
-                /// VERTICAL DROPOFF PANEL ///
-                if (verticalDropOffEnabled)
-                {
-                    panel = DefaultControls.CreatePanel(_oodResources);
-                    panel.transform.SetParent(contentTransform, false);
-                    panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 85);
-                    image = panel.GetComponent<Image>();
-                    image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
-                    GUIManager.Instance.CreateText(
-                        "Vertical Drop-off",
-                        panel.transform,
-                        new Vector2(0.5f, 0.5f),
-                        new Vector2(0.5f, 0.5f),
-                        new Vector2(8f, 6f),
-                        GUIManager.Instance.AveriaSerifBold,
-                        12,
-                        GUIManager.Instance.ValheimOrange,
-                        true,
-                        Color.black,
-                        120f,
-                        18f,
-                        false);
-                    var inputObj = GUIManager.Instance.CreateInputField(
-                        panel.transform,
-                        new Vector2(0.5f, 0.5f),
-                        new Vector2(0.5f, 0.5f),
-                        new Vector2(0f, -10f),
-                        InputField.ContentType.Standard,
-                        _basePlayer.PlayerSettings.VerticalDistanceDropoff.ToString(CultureInfo.CurrentCulture),
-                        14,
-                        110f,
-                        26f);
-                    var input = inputObj.GetComponent<InputField>();
-                    input.contentType = InputField.ContentType.DecimalNumber;
-                    input.onEndEdit.AddListener(OnVerticalDistanceDropoffInputEndEdit);
-                    //////////////////////////////
-                    /// VERTICAL DROPOFF POWER PANEL ///
-                    panel = DefaultControls.CreatePanel(_oodResources);
-                    panel.transform.SetParent(contentTransform, false);
-                    panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 85);
-                    image = panel.GetComponent<Image>();
-                    image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
-                    GUIManager.Instance.CreateText(
-                        "Drop-off Power",
-                        panel.transform,
-                        new Vector2(0.5f, 0.5f),
-                        new Vector2(0.5f, 0.5f),
-                        new Vector2(8f, 6f),
-                        GUIManager.Instance.AveriaSerifBold,
-                        12,
-                        GUIManager.Instance.ValheimOrange,
-                        true,
-                        Color.black,
-                        120f,
-                        18f,
-                        false);
-                    inputObj = GUIManager.Instance.CreateInputField(
-                        panel.transform,
-                        new Vector2(0.5f, 0.5f),
-                        new Vector2(0.5f, 0.5f),
-                        new Vector2(0f, -10f),
-                        InputField.ContentType.Standard,
-                        _basePlayer.PlayerSettings.DropoffPower.ToString(CultureInfo.CurrentCulture),
-                        14,
-                        110f,
-                        26f);
-                    input = inputObj.GetComponent<InputField>();
-                    input.contentType = InputField.ContentType.DecimalNumber;
-                    input.onEndEdit.AddListener(OnDropoffPowerInputEndEdit);
-                }
-                //////////////////////////////
-                /// SPEAKERS PANEL ///
-                panel = DefaultControls.CreatePanel(_oodResources);
-                panel.transform.SetParent(contentTransform, false);
-                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 85);
-                image = panel.GetComponent<Image>();
-                image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
-                var speakerTextObj = GUIManager.Instance.CreateText(
-                    "Speakers: 0",
-                    panel.transform,
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(8f, 6f),
-                    GUIManager.Instance.AveriaSerifBold,
-                    12,
-                    GUIManager.Instance.ValheimOrange,
-                    true,
-                    Color.black,
-                    120f,
-                    18f,
-                    false);
-                _speakerText = speakerTextObj.GetComponent<Text>();
-                var unlinkAllButton = GUIManager.Instance.CreateButton(
-                    "Unlink All",
-                    panel.transform,
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(0f, -10f),
-                    120f,
-                    26f);
-                var unlinkAllButtonAction = unlinkAllButton.GetComponent<Button>();
-                unlinkAllButtonAction.onClick.AddListener(() => _basePlayer.UnlinkAllSpeakers());
-                //////////////////////////////
-                /// TIME PANEL ///
-                panel = DefaultControls.CreatePanel(_oodResources);
-                panel.transform.SetParent(contentTransform, false);
-                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 85);
-                image = panel.GetComponent<Image>();
-                image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
-                var timeInputObj = GUIManager.Instance.CreateInputField(
-                    panel.transform,
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(0f, -2f),
-                    InputField.ContentType.Standard,
-                    _basePlayer.PlaybackTime.ToString(CultureInfo.CurrentCulture),
-                    14,
-                    110f,
-                    26f);
-                var timeInput = timeInputObj.GetComponent<InputField>();
-                timeInput.contentType = InputField.ContentType.DecimalNumber;
-                var submitTimeButton = GUIManager.Instance.CreateButton(
-                    "Set Time",
-                    panel.transform,
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(120f, -2f),
-                    120f,
-                    26f);
-                var submitTimeButtonAction = submitTimeButton.GetComponent<Button>();
-                submitTimeButtonAction.onClick.AddListener(() =>
-                {
-                    if(_basePlayer.PlayerSettings.CurrentMode == PlayerSettings.PlayerMode.Dynamic) return;
-                    if (timeInput.text.Length < 1) return;
-                    var parse = float.Parse(timeInput.text);
-                    _rpc.SendData(0, CinemaPackage.RPCDataType.SyncTime, _basePlayer.PlayerSettings.PlayerType, _basePlayer.MediaPlayerID, _basePlayer.gameObject.transform.position, parse);
-                });
-                //////////////////////////////
-                /// RESYNC PANEL ///
-                panel = DefaultControls.CreatePanel(_oodResources);
-                panel.transform.SetParent(contentTransform, false);
-                panel.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 75);
-                image = panel.GetComponent<Image>();
-                image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
-                var reloadPlayerObj = GUIManager.Instance.CreateButton(
-                    "Reload Player",
-                    panel.transform,
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(-85f, 0),
-                    120f,
-                    26f);
-                var reloadPlayerButton = reloadPlayerObj.GetComponent<Button>();
-                reloadPlayerButton.onClick.AddListener(() =>
-                {
-                    _basePlayer.LoadZDO();
-                });
-                var resyncPlayerObj = GUIManager.Instance.CreateButton(
-                    "Sync Time",
-                    panel.transform,
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(0.5f, 0.5f),
-                    new Vector2(85f, 0),
-                    120f,
-                    26f);
-                var resyncPlayerButton = resyncPlayerObj.GetComponent<Button>();
-                resyncPlayerButton.onClick.AddListener(() =>
-                {
-                    _basePlayer.SendRequestTimeSync_RPC();
-                });
+            _masterVolumeSliderComponent.onValueChanged.AddListener(OnMasterVolumeChanged);
+
+            //////////////////////////////
+            /// VERTICAL DROPOFF ROWS ///
+            if (verticalDropOffEnabled)
+            {
+                var dropoffRow = CreateSettingsRow(contentTransform, 34f);
+                CreateRowLabel(dropoffRow, "Vertical Drop-off", 150f);
+                var dropoffInput = CreateRowInput(dropoffRow,
+                    _basePlayer.PlayerSettings.VerticalDistanceDropoff.ToString(CultureInfo.CurrentCulture),
+                    110f, SettingsRowInset);
+                dropoffInput.onEndEdit.AddListener(OnVerticalDistanceDropoffInputEndEdit);
+
+                var powerRow = CreateSettingsRow(contentTransform, 34f);
+                CreateRowLabel(powerRow, "Drop-off Power", 150f);
+                var powerInput = CreateRowInput(powerRow,
+                    _basePlayer.PlayerSettings.DropoffPower.ToString(CultureInfo.CurrentCulture),
+                    110f, SettingsRowInset);
+                powerInput.onEndEdit.AddListener(OnDropoffPowerInputEndEdit);
             }
+
+            //////////////////////////////
+            /// SPEAKERS ROW ///
+            var speakerRow = CreateSettingsRow(contentTransform, 34f);
+            _speakerText = CreateRowLabel(speakerRow, "Speakers: 0", 130f);
+            var unlinkAllButton = CreateRowButton(speakerRow, "Unlink All", 110f, SettingsRowInset);
+            unlinkAllButton.onClick.AddListener(() => _basePlayer.UnlinkAllSpeakers());
+
+            //////////////////////////////
+            /// TIME ROW ///
+            var timeRow = CreateSettingsRow(contentTransform, 34f);
+            CreateRowLabel(timeRow, "Time", 60f);
+            var setTimeButton = CreateRowButton(timeRow, "Set Time", 100f, SettingsRowInset);
+            var timeInput = CreateRowInput(timeRow,
+                _basePlayer.PlaybackTime.ToString(CultureInfo.CurrentCulture), 100f, SettingsRowInset + 106f);
+            setTimeButton.onClick.AddListener(() =>
+            {
+                if (_basePlayer.PlayerSettings.CurrentMode == PlayerSettings.PlayerMode.Dynamic) return;
+                if (timeInput.text.Length < 1) return;
+                var parse = float.Parse(timeInput.text);
+                _rpc.SendData(0, CinemaPackage.RPCDataType.SyncTime, _basePlayer.PlayerSettings.PlayerType,
+                    _basePlayer.MediaPlayerID, _basePlayer.gameObject.transform.position, parse);
+            });
+
+            //////////////////////////////
+            /// RESYNC ROW ///
+            var resyncRow = CreateSettingsRow(contentTransform, 34f);
+            var reloadPlayerObj = GUIManager.Instance.CreateButton("Reload Player", resyncRow.transform,
+                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), Vector2.zero, 135f, 26f);
+            AnchorLeft(reloadPlayerObj, SettingsRowInset);
+            reloadPlayerObj.GetComponent<Button>().onClick.AddListener(() => _basePlayer.LoadZDO());
+            var resyncPlayerButton = CreateRowButton(resyncRow, "Sync Time", 135f, SettingsRowInset);
+            resyncPlayerButton.onClick.AddListener(() => _basePlayer.SendRequestTimeSync_RPC());
+
+            //////////////////////////////
+            /// EXTERNAL JS ROW ///
+            var externalJsRow = CreateSettingsRow(contentTransform, 48f);
+            var externalJsTextObj = GUIManager.Instance.CreateText(
+                "External JS: checking",
+                externalJsRow.transform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(SettingsRowInset, -6f),
+                GUIManager.Instance.AveriaSerifBold,
+                12,
+                GUIManager.Instance.ValheimOrange,
+                true,
+                Color.black,
+                290f,
+                18f,
+                false);
+            var externalJsTextRT = externalJsTextObj.GetComponent<RectTransform>();
+            externalJsTextRT.pivot = new Vector2(0f, 1f);
+            externalJsTextRT.anchoredPosition = new Vector2(SettingsRowInset, -6f);
+            _externalJsStatusText = externalJsTextObj.GetComponent<Text>();
+            _externalJsStatusText.alignment = TextAnchor.MiddleLeft;
+            _externalJsStatusText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _externalJsGuideButtonObj = GUIManager.Instance.CreateButton(
+                "EJS Setup Guide",
+                externalJsRow.transform,
+                new Vector2(1f, 0f),
+                new Vector2(1f, 0f),
+                Vector2.zero,
+                130f,
+                22f);
+            var externalJsButtonRT = _externalJsGuideButtonObj.GetComponent<RectTransform>();
+            externalJsButtonRT.pivot = new Vector2(1f, 0f);
+            externalJsButtonRT.anchoredPosition = new Vector2(-SettingsRowInset, 6f);
+            _externalJsGuideButtonObj.GetComponent<Button>().onClick.AddListener(() =>
+            {
+                // Proton has no usable default browser, so keep the URL in the log too.
+                Logger.LogInfo("EJS setup guide: " + ExternalJsRuntime.SetupGuideUrl);
+                Application.OpenURL(ExternalJsRuntime.SetupGuideUrl);
+            });
+            UpdateExternalJsStatus();
+        }
+
+        /// <summary>Full-width settings row with a fixed height the layout group honours.</summary>
+        private GameObject CreateSettingsRow(Transform content, float height)
+        {
+            var row = DefaultControls.CreatePanel(_oodResources);
+            row.transform.SetParent(content, false);
+            var image = row.GetComponent<Image>();
+            image.color = new Color(image.color.r, image.color.g, image.color.b, 0.0155f);
+            var layout = row.AddComponent<LayoutElement>();
+            layout.minHeight = height;
+            layout.preferredHeight = height;
+            layout.flexibleHeight = 0f;
+            return row;
+        }
+
+        private Toggle CreateSettingsToggle(Transform content, string label, bool isOn,
+            UnityAction<bool> onValueChanged)
+        {
+            var toggleObj = DefaultControls.CreateToggle(_oodResources);
+            toggleObj.transform.SetParent(content, false);
+            var layout = toggleObj.AddComponent<LayoutElement>();
+            layout.minHeight = 28f;
+            layout.preferredHeight = 28f;
+            layout.flexibleHeight = 0f;
+
+            var background = toggleObj.transform.Find("Background").GetComponent<RectTransform>();
+            background.anchorMin = new Vector2(0f, 0.5f);
+            background.anchorMax = new Vector2(0f, 0.5f);
+            background.pivot = new Vector2(0f, 0.5f);
+            background.anchoredPosition = new Vector2(SettingsRowInset, 0f);
+            background.sizeDelta = new Vector2(18f, 18f);
+            var checkmark = toggleObj.transform.Find("Background/Checkmark").GetComponent<RectTransform>();
+            checkmark.anchorMin = new Vector2(0.5f, 0.5f);
+            checkmark.anchorMax = new Vector2(0.5f, 0.5f);
+            checkmark.pivot = new Vector2(0.5f, 0.5f);
+            checkmark.anchoredPosition = Vector2.zero;
+            checkmark.sizeDelta = new Vector2(18f, 18f);
+
+            var labelRT = toggleObj.transform.Find("Label").GetComponent<RectTransform>();
+            labelRT.anchorMin = new Vector2(0f, 0f);
+            labelRT.anchorMax = new Vector2(1f, 1f);
+            labelRT.offsetMin = new Vector2(SettingsRowInset + 24f, 0f);
+            labelRT.offsetMax = new Vector2(-SettingsRowInset, 0f);
+            var labelText = labelRT.GetComponent<Text>();
+            GUIManager.Instance.ApplyTextStyle(labelText, GUIManager.Instance.AveriaSerifBold,
+                GUIManager.Instance.ValheimOrange, 14);
+            labelText.alignment = TextAnchor.MiddleLeft;
+            labelText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            labelText.text = label;
+
+            var toggle = toggleObj.GetComponent<Toggle>();
+            toggle.isOn = isOn;
+            toggle.onValueChanged.AddListener(onValueChanged);
+            return toggle;
+        }
+
+        private Text CreateRowLabel(GameObject row, string text, float width)
+        {
+            var labelObj = GUIManager.Instance.CreateText(
+                text,
+                row.transform,
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(SettingsRowInset, 0f),
+                GUIManager.Instance.AveriaSerifBold,
+                13,
+                GUIManager.Instance.ValheimOrange,
+                true,
+                Color.black,
+                width,
+                22f,
+                false);
+            AnchorLeft(labelObj, SettingsRowInset);
+            var label = labelObj.GetComponent<Text>();
+            label.alignment = TextAnchor.MiddleLeft;
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            return label;
+        }
+
+        private InputField CreateRowInput(GameObject row, string value, float width, float inset)
+        {
+            var inputObj = GUIManager.Instance.CreateInputField(
+                row.transform,
+                new Vector2(1f, 0.5f),
+                new Vector2(1f, 0.5f),
+                Vector2.zero,
+                InputField.ContentType.DecimalNumber,
+                value,
+                14,
+                width,
+                26f);
+            AnchorRight(inputObj, inset);
+            var input = inputObj.GetComponent<InputField>();
+            input.contentType = InputField.ContentType.DecimalNumber;
+            input.text = value;
+            return input;
+        }
+
+        private Button CreateRowButton(GameObject row, string text, float width, float inset)
+        {
+            var buttonObj = GUIManager.Instance.CreateButton(
+                text,
+                row.transform,
+                new Vector2(1f, 0.5f),
+                new Vector2(1f, 0.5f),
+                Vector2.zero,
+                width,
+                26f);
+            AnchorRight(buttonObj, inset);
+            return buttonObj.GetComponent<Button>();
+        }
+
+        private static void AnchorLeft(GameObject target, float inset)
+        {
+            var rt = target.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, 0.5f);
+            rt.anchorMax = new Vector2(0f, 0.5f);
+            rt.pivot = new Vector2(0f, 0.5f);
+            rt.anchoredPosition = new Vector2(inset, 0f);
+        }
+
+        private static void AnchorRight(GameObject target, float inset)
+        {
+            var rt = target.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(1f, 0.5f);
+            rt.anchorMax = new Vector2(1f, 0.5f);
+            rt.pivot = new Vector2(1f, 0.5f);
+            rt.anchoredPosition = new Vector2(-inset, 0f);
+        }
+
+        /// <summary>
+        ///     Reflects yt-dlp's external JavaScript runtime availability, which decides whether
+        ///     YouTube's full format list can be resolved on this client.
+        /// </summary>
+        private void UpdateExternalJsStatus()
+        {
+            if (!_externalJsStatusText) return;
+
+            var extractsLocally = OODConfig.YoutubeAPI.Value == OODConfig.YouTubeAPI.YouTubeExplode;
+            if (!extractsLocally)
+            {
+                _externalJsStatusText.text = "External JS: handled by NodeJS server";
+                _externalJsStatusText.color = Color.gray;
+                if (_externalJsGuideButtonObj) _externalJsGuideButtonObj.SetActive(false);
+                return;
+            }
+
+            ExternalJsRuntime.Refresh();
+            if (ExternalJsRuntime.Detected && !ExternalJsRuntime.ChallengeFailed)
+            {
+                _externalJsStatusText.text = "External JS: " + ExternalJsRuntime.RuntimeName + " detected";
+                _externalJsStatusText.color = new Color(0.4f, 0.85f, 0.4f);
+                if (_externalJsGuideButtonObj) _externalJsGuideButtonObj.SetActive(false);
+                return;
+            }
+
+            _externalJsStatusText.text = ExternalJsRuntime.Detected
+                ? "External JS: " + ExternalJsRuntime.RuntimeName + " failed, formats limited"
+                : "External JS: not detected, formats limited";
+            _externalJsStatusText.color = GUIManager.Instance.ValheimOrange;
+            if (_externalJsGuideButtonObj) _externalJsGuideButtonObj.SetActive(true);
         }
 
         private void ToggleLock()
@@ -979,9 +1005,23 @@ namespace OdinOnDemand.Utils.UI
             OODConfig.UseNightlyYtDlp.Value = enabled;
         }
 
-        private static void OnLegacyYoutubeToggleChanged(bool enabled)
+        private static readonly int[] MaxVideoHeights = { 360, 480, 720, 1080, 1440, 2160 };
+
+        private static string MaxHeightLabelText()
         {
-            OODConfig.UseLegacyYoutubePlayback.Value = enabled;
+            return "Max Quality: " + OODConfig.MaxVideoHeight.Value + "p";
+        }
+
+        /// <summary>
+        ///     Steps through the supported caps. Higher values decode and upload several times more
+        ///     pixels per frame, so this is the knob that decides whether playback stays smooth.
+        /// </summary>
+        private void CycleMaxVideoHeight()
+        {
+            var current = Array.IndexOf(MaxVideoHeights, OODConfig.MaxVideoHeight.Value);
+            var next = MaxVideoHeights[(current + 1) % MaxVideoHeights.Length];
+            OODConfig.MaxVideoHeight.Value = next;
+            if (_maxHeightLabel) _maxHeightLabel.text = MaxHeightLabelText();
         }
 
         private void OnVolumeSliderChanged(float vol)

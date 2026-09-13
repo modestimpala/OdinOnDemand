@@ -15,6 +15,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using OdinOnDemand.Components;
 using OdinOnDemand.Dynamic;
+using OdinOnDemand.Patches;
 using OdinOnDemand.Utils;
 using OdinOnDemand.Utils.Config;
 using OdinOnDemand.Utils.Net;
@@ -31,7 +32,7 @@ namespace OdinOnDemand
     {
         public const string PluginGUID = "com.valmedia.odinondemand";
         public const string PluginName = "OdinOnDemand";
-        public const string PluginVersion = "1.0.9";
+        public const string PluginVersion = "1.2.0";
 
         private static readonly CustomLocalization Localization = LocalizationManager.Instance.GetLocalization();
         public static readonly RpcHandler RPCHandlers = new RpcHandler();
@@ -98,8 +99,10 @@ namespace OdinOnDemand
             pieceConfig.Icon = assets.LoadAsset<Sprite>("assets/MOD ICONS/cartplayericon.png");
             
             
-            if (PieceManager.Instance.AddPiece(new CustomPiece("cartplayer", "Cart", pieceConfig)))
+            var cartPiece = new CustomPiece("cartplayer", "Cart", pieceConfig);
+            if (PieceManager.Instance.AddPiece(cartPiece))
             {
+                PieceCategoryPatch.Apply(cartPiece.Piece);
                 var cart = PrefabManager.Instance.GetPrefab("cartplayer");
                 Instantiate(attach, cart.transform, true);
                 cart.transform.Find("cartplayer_attach(Clone)").gameObject.AddComponent<CartPlayerComponent>();
@@ -286,7 +289,8 @@ namespace OdinOnDemand
                 var tex = _valMediaAssets.LoadAsset<Texture2D>("assets/MOD ICONS/" + properName + "icon.png");
                 var mySprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), Vector2.zero);
                 c.Icon = mySprite; //TODO: procedural icon generation, or embedded icons in assetbundle
-                PieceManager.Instance.AddPiece(new CustomPiece(_valMediaAssets, properName, false, c));
+                var customPiece = new CustomPiece(_valMediaAssets, properName, false, c);
+                if (PieceManager.Instance.AddPiece(customPiece)) PieceCategoryPatch.Apply(customPiece.Piece);
             });
         }
         
@@ -304,6 +308,7 @@ namespace OdinOnDemand
         {
             Localization.AddTranslation("English", new Dictionary<string, string>
             {
+                { "tag_odinondemand", "OdinOnDemand" },
                 { "piece_flatscreen", "Flatscreen" },
                 { "piece_tabletv", "Table TV" },
                 { "piece_boombox", "Boombox" },

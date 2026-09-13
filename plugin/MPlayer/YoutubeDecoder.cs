@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -23,6 +24,8 @@ namespace OdinOnDemand.MPlayer
 
         private static readonly object CoreLock = new object();
         private static bool coreInitialized;
+        private static LibVLC sharedLibVlc;
+        private static int sharedLibVlcUsers;
 
         private readonly ConcurrentQueue<Action> mainThreadActions = new ConcurrentQueue<Action>();
 
@@ -140,7 +143,8 @@ namespace OdinOnDemand.MPlayer
         /// Begins opening the streams. LibVLC must briefly play to initialize its decoders;
         /// Prepared is raised only after LibVLC subsequently confirms the paused state.
         /// </summary>
-        public void Prepare(string videoUrl, string audioUrl, AudioSource output, RenderTexture renderTarget)
+        public void Prepare(string videoUrl, string audioUrl, AudioSource output, RenderTexture renderTarget,
+            IDictionary<string, string> headers = null)
         {
             if (destroyed)
             {
@@ -157,7 +161,7 @@ namespace OdinOnDemand.MPlayer
                 return;
             }
 
-            pendingPrepare = new PrepareRequest(videoUri, audioUri, output, renderTarget);
+            pendingPrepare = new PrepareRequest(videoUri, audioUri, output, renderTarget, headers);
             pendingSeekSeconds = null;
             requestedPlay = false;
             isPrepared = false;
@@ -323,16 +327,7 @@ namespace OdinOnDemand.MPlayer
                     TaskScheduler.Default);
             }
 
-            LibVLC nativeLibrary = libVlc;
-            libVlc = null;
-            if (nativeLibrary != null)
-            {
-                finalShutdown.ContinueWith(
-                    ignored => nativeLibrary.Dispose(),
-                    CancellationToken.None,
-                    TaskContinuationOptions.None,
-                    TaskScheduler.Default);
-            }
+            ReleaseLibVlc(finalShutdown);
         }
 
         private void StartPendingPrepare()
@@ -346,6 +341,7 @@ namespace OdinOnDemand.MPlayer
 
             MediaPlayer player = null;
             Media media = null;
+            ChunkedHttpMediaInput videoInput = null;
             PlaybackSession createdSession = null;
             try
             {
@@ -385,7 +381,10 @@ namespace OdinOnDemand.MPlayer
                 createdSession = new PlaybackSession(this, player, audio, request.TargetTexture != null);
                 createdSession.ConfigureCallbacks();
 
-                media = new Media(libVlc, request.VideoUri);
+                // YouTube throttles an open-ended stream to about its own bitrate, which starves
+                // the decoder; bounded range requests keep the buffer ahead of playback.
+                videoInput = new ChunkedHttpMediaInput(request.VideoUri.AbsoluteUri, request.Headers);
+                media = new Media(libVlc, videoInput);
                 if (request.AudioUri != null &&
                     !media.AddSlave(MediaSlaveType.Audio, 4, request.AudioUri))
                 {
@@ -393,8 +392,11 @@ namespace OdinOnDemand.MPlayer
                 }
 
                 player.Media = media;
-                media.Dispose();
+                // The media owns the input callbacks, so both stay alive for the session.
+                createdSession.Media = media;
+                createdSession.Input = videoInput;
                 media = null;
+                videoInput = null;
 
                 ConfigureUnityAudio(request.Output, audio);
                 lastSampledNativeTime = -1;
@@ -421,6 +423,11 @@ namespace OdinOnDemand.MPlayer
                     media.Dispose();
                 }
 
+                if (videoInput != null)
+                {
+                    videoInput.Dispose();
+                }
+
                 if (createdSession != null)
                 {
                     if (ReferenceEquals(session, createdSession))
@@ -443,6 +450,11 @@ namespace OdinOnDemand.MPlayer
             }
         }
 
+        /// <summary>
+        ///     Acquires the process-wide LibVLC instance. Creating one costs roughly 25 ms of module
+        ///     loading on the Unity thread, so players share a single instance instead of stalling
+        ///     the game every time a screen starts a video.
+        /// </summary>
         private void EnsureLibVlc()
         {
             if (libVlc != null)
@@ -469,10 +481,43 @@ namespace OdinOnDemand.MPlayer
                     Core.Initialize(nativeDirectory);
                     coreInitialized = true;
                 }
-            }
 
-            // Debug logging is deliberately disabled: native messages can include signed stream URLs.
-            libVlc = new LibVLC("--no-video-title-show", "--no-sub-autodetect-file", "--demux=avformat");
+                if (sharedLibVlc == null)
+                {
+                    // Debug logging is deliberately disabled: native messages can include signed
+                    // stream URLs.
+                    sharedLibVlc = new LibVLC(
+                        "--no-video-title-show", "--no-sub-autodetect-file", "--demux=avformat");
+                }
+
+                sharedLibVlcUsers++;
+                libVlc = sharedLibVlc;
+            }
+        }
+
+        /// <summary>
+        ///     Releases this decoder's claim on the shared instance, disposing it off the Unity
+        ///     thread once the last player is gone.
+        /// </summary>
+        private void ReleaseLibVlc(Task after)
+        {
+            if (libVlc == null) return;
+            libVlc = null;
+
+            lock (CoreLock)
+            {
+                if (--sharedLibVlcUsers > 0) return;
+
+                LibVLC nativeLibrary = sharedLibVlc;
+                sharedLibVlc = null;
+                if (nativeLibrary == null) return;
+
+                after.ContinueWith(
+                    ignored => nativeLibrary.Dispose(),
+                    CancellationToken.None,
+                    TaskContinuationOptions.None,
+                    TaskScheduler.Default);
+            }
         }
 
         private void ConfigureUnityAudio(AudioSource output, PcmRingBuffer audio)
@@ -990,18 +1035,21 @@ namespace OdinOnDemand.MPlayer
 
         private sealed class PrepareRequest
         {
-            public PrepareRequest(Uri videoUri, Uri audioUri, AudioSource output, RenderTexture targetTexture)
+            public PrepareRequest(Uri videoUri, Uri audioUri, AudioSource output,
+                RenderTexture targetTexture, IDictionary<string, string> headers)
             {
                 VideoUri = videoUri;
                 AudioUri = audioUri;
                 Output = output;
                 TargetTexture = targetTexture;
+                Headers = headers;
             }
 
             public Uri VideoUri { get; private set; }
             public Uri AudioUri { get; private set; }
             public AudioSource Output { get; private set; }
             public RenderTexture TargetTexture { get; private set; }
+            public IDictionary<string, string> Headers { get; private set; }
         }
 
         private sealed class PlaybackSession
@@ -1034,6 +1082,12 @@ namespace OdinOnDemand.MPlayer
             }
 
             public MediaPlayer Player { get; private set; }
+
+            /// <summary>Media handle kept alive because it owns the callback input.</summary>
+            public Media Media { get; set; }
+
+            /// <summary>Chunked reader feeding LibVLC, released after the player stops.</summary>
+            public ChunkedHttpMediaInput Input { get; set; }
             public bool HasEnded { get; set; }
             public PcmRingBuffer Audio { get; private set; }
             public bool Preparing { get; set; }
@@ -1149,6 +1203,20 @@ namespace OdinOnDemand.MPlayer
                     }
                     finally
                     {
+                        // The media owns the callback input, so both outlive the player and are
+                        // released only once native playback has stopped.
+                        if (Media != null)
+                        {
+                            Media.Dispose();
+                            Media = null;
+                        }
+
+                        if (Input != null)
+                        {
+                            Input.Dispose();
+                            Input = null;
+                        }
+
                         lock (videoGate)
                         {
                             if (videoBuffer != null)
