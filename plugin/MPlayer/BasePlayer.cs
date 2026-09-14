@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading;
 using OdinOnDemand.Components;
 using OdinOnDemand.Dynamic;
 using OdinOnDemand.Interfaces;
@@ -47,6 +48,7 @@ namespace OdinOnDemand.MPlayer
         private bool hasPendingPlaybackTime;
         private bool youtubeBackendActive;
         private bool youtubeLoading;
+        private CancellationTokenSource streamlinkCancellation;
 
 // Playlist Management
         public int PlaylistPosition { get; set; }
@@ -131,6 +133,7 @@ namespace OdinOnDemand.MPlayer
         public void OnDestroy()
         {
             playbackGeneration++;
+            CancelStreamlink();
             DestroyYoutubeBackend();
             if (mScreen != null)
             {
@@ -143,7 +146,7 @@ namespace OdinOnDemand.MPlayer
 
         private void EndReached(VideoPlayer source)
         {
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube) return;
+            if (UsesVlcBackend()) return;
             HandlePlaybackEnded();
         }
 
@@ -193,7 +196,7 @@ namespace OdinOnDemand.MPlayer
 
         private void ScreenPrepareCompleted(VideoPlayer source)
         {
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube) return;
+            if (UsesVlcBackend()) return;
             CompletePreparation();
         }
 
@@ -235,7 +238,7 @@ namespace OdinOnDemand.MPlayer
 
         private void ScreenErrorReceived(VideoPlayer source, string message)
         {
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube) return;
+            if (UsesVlcBackend()) return;
             HandlePlaybackError(message);
         }
 
@@ -272,7 +275,7 @@ namespace OdinOnDemand.MPlayer
             {
                 if (youtubeBackendActive && youtubeDecoder != null)
                     return youtubeDecoder.Time;
-                if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+                if (UsesVlcBackend())
                     return hasPendingPlaybackTime ? pendingPlaybackTime : 0d;
                 if (IsVideoLink())
                     return mScreen != null ? mScreen.time : 0d;
@@ -291,15 +294,22 @@ namespace OdinOnDemand.MPlayer
                 youtubeDecoder.IsLooping = looping && !PlayerSettings.IsPlayingPlaylist;
                 return;
             }
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube) return;
+            if (UsesVlcBackend()) return;
 
             if (mScreen != null) mScreen.isLooping = looping && !PlayerSettings.IsPlayingPlaylist;
             if (mAudio != null) mAudio.loop = looping;
         }
 
-        private bool IsVideoLink()
+        private bool UsesVlcBackend()
         {
             return PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube ||
+                   PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.NetworkStream ||
+                   PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Twitch;
+        }
+
+        private bool IsVideoLink()
+        {
+            return UsesVlcBackend() ||
                    PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.RelativeVideo ||
                    PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Video;
         }
@@ -308,7 +318,7 @@ namespace OdinOnDemand.MPlayer
         {
             if (youtubeBackendActive && youtubeDecoder != null)
                 return youtubeDecoder.IsPlaying;
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            if (UsesVlcBackend())
                 return false;
             if (IsVideoLink())
                 return mScreen != null && mScreen.isPlaying;
@@ -319,7 +329,7 @@ namespace OdinOnDemand.MPlayer
         {
             if (youtubeBackendActive && youtubeDecoder != null)
                 return youtubeDecoder.IsPrepared;
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            if (UsesVlcBackend())
                 return false;
             if (IsVideoLink())
                 return mScreen != null && mScreen.isPrepared;
@@ -330,7 +340,7 @@ namespace OdinOnDemand.MPlayer
         {
             if (youtubeBackendActive && youtubeDecoder != null)
                 return youtubeDecoder.IsLooping;
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            if (UsesVlcBackend())
                 return PlayerSettings.IsLooping;
             if (IsVideoLink())
                 return mScreen != null && mScreen.isLooping;
@@ -344,7 +354,7 @@ namespace OdinOnDemand.MPlayer
                 if (youtubeDecoder.IsPrepared) youtubeDecoder.Play();
                 return;
             }
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            if (UsesVlcBackend())
                 return;
 
             if (IsVideoLink())
@@ -365,7 +375,7 @@ namespace OdinOnDemand.MPlayer
                 if (youtubeDecoder.IsPrepared) youtubeDecoder.Pause();
                 return;
             }
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            if (UsesVlcBackend())
                 return;
 
             if (IsVideoLink())
@@ -385,7 +395,7 @@ namespace OdinOnDemand.MPlayer
                 if (!youtubeDecoder.IsPrepared) return;
                 youtubeDecoder.Time = pendingPlaybackTime;
             }
-            else if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            else if (UsesVlcBackend())
             {
                 return;
             }
@@ -409,6 +419,7 @@ namespace OdinOnDemand.MPlayer
         private int BeginSourceSwitch(double initialTime)
         {
             playbackGeneration++;
+            CancelStreamlink();
             DestroyYoutubeBackend();
             if (DynamicStationCoroutine != null)
             {
@@ -452,9 +463,10 @@ namespace OdinOnDemand.MPlayer
             youtubeDecoder = null;
         }
 
-        private void PrepareYoutubeBackend(YoutubeStreams streams, int generation)
+        private void PrepareVlcBackend(string videoUrl, string audioUrl, int generation,
+            IDictionary<string, string> headers = null, bool useChunkedInput = true)
         {
-            if (generation != playbackGeneration || PlayerSettings.PlayerLinkType != PlayerSettings.LinkType.Youtube)
+            if (generation != playbackGeneration || !UsesVlcBackend())
                 return;
 
             DestroyYoutubeBackend();
@@ -481,17 +493,72 @@ namespace OdinOnDemand.MPlayer
             try
             {
                 youtubeDecoder.Prepare(
-                    streams.VideoUrl,
-                    streams.AudioUrl,
+                    videoUrl,
+                    audioUrl,
                     mAudio,
                     mScreen != null ? mScreen.targetTexture : null,
-                    streams.Headers);
+                    headers,
+                    useChunkedInput);
             }
             catch (Exception exception)
             {
                 HandlePlaybackError(exception.Message);
                 DestroyYoutubeBackend();
             }
+        }
+
+        private void CancelStreamlink()
+        {
+            streamlinkCancellation?.Cancel();
+            streamlinkCancellation = null;
+        }
+
+        private IEnumerator PlayTwitch(string url, int generation)
+        {
+            youtubeLoading = true;
+            UIController.SetLoadingIndicatorText("Resolving Twitch");
+            if (UIController.LoadingIndicatorObj) UIController.LoadingIndicatorObj.SetActive(true);
+            using (var cancellation = new CancellationTokenSource())
+            {
+                streamlinkCancellation = cancellation;
+                var resolution = StreamlinkRuntime.ResolveAsync(url, OODConfig.MaxVideoHeight.Value,
+                    cancellation.Token);
+                yield return new WaitUntil(() => resolution.IsCompleted);
+                if (ReferenceEquals(streamlinkCancellation, cancellation)) streamlinkCancellation = null;
+                // Observe exceptions even when a newer source has superseded this request.
+                var error = resolution.Exception?.GetBaseException();
+                if (generation != playbackGeneration || resolution.IsCanceled) yield break;
+                if (error != null)
+                {
+                    HandlePlaybackError(error.Message);
+                    if (UIController.LoadingIndicatorObj)
+                        UIController.SetLoadingIndicatorText(error.Message);
+                    yield break;
+                }
+                PrepareVlcBackend(resolution.Result, null, generation, useChunkedInput: false);
+            }
+        }
+
+        private IEnumerator PrepareNetworkStream(string url, int generation)
+        {
+            youtubeLoading = true;
+            // Preserve website extraction without mistaking extensionless radio mounts for websites.
+            using (var probe = UnityWebRequest.Head(url))
+            {
+                probe.timeout = 10;
+                yield return probe.SendWebRequest();
+                if (generation != playbackGeneration) yield break;
+                string contentType = probe.GetResponseHeader("Content-Type");
+                if (probe.result == UnityWebRequest.Result.Success && contentType != null &&
+                    (contentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) ||
+                     contentType.StartsWith("application/xhtml+xml", StringComparison.OrdinalIgnoreCase)))
+                {
+                    PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Youtube;
+                    PlayYoutube(url, generation);
+                    yield break;
+                }
+            }
+            PrepareVlcBackend(url, null, generation, useChunkedInput: false);
         }
 
         private void UpdateChecks() //1second checks, screen render distance, master volume updates and playlist gui updates
@@ -996,6 +1063,7 @@ namespace OdinOnDemand.MPlayer
             if (URLGrab.LoadingBool || generation != playbackGeneration) return;
             if (!OODConfig.IsYtEnabled.Value)
             {
+                youtubeLoading = false;
                 PlayerSettings.IsPlaying = false;
                 StartCoroutine(UIController.UnavailableIndicator("YouTube disabled"));
                 return;
@@ -1027,6 +1095,36 @@ namespace OdinOnDemand.MPlayer
             URLGrab.Reset();
             int generation = BeginSourceSwitch(time);
             ClearRenderTexture(mScreen.targetTexture);
+
+            if (Uri.TryCreate(url, UriKind.Absolute, out var networkUri) &&
+                (networkUri.Scheme == Uri.UriSchemeHttp || networkUri.Scheme == Uri.UriSchemeHttps))
+            {
+                string host = networkUri.Host;
+                if (host.Equals("youtube.com", StringComparison.OrdinalIgnoreCase) ||
+                    host.EndsWith(".youtube.com", StringComparison.OrdinalIgnoreCase) ||
+                    host.Equals("youtu.be", StringComparison.OrdinalIgnoreCase) ||
+                    host.Equals("youtube-nocookie.com", StringComparison.OrdinalIgnoreCase) ||
+                    host.EndsWith(".youtube-nocookie.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Youtube;
+                    PlayYoutube(url, generation);
+                    return;
+                }
+                if (StreamlinkRuntime.IsTwitchUrl(networkUri))
+                {
+                    PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Twitch;
+                    StartCoroutine(PlayTwitch(url, generation));
+                    return;
+                }
+                if (!host.Equals("soundcloud.com", StringComparison.OrdinalIgnoreCase) &&
+                    !host.EndsWith(".soundcloud.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.NetworkStream;
+                    DownloadURL = networkUri;
+                    StartCoroutine(PrepareNetworkStream(url, generation));
+                    return;
+                }
+            }
 
             if (URLGrab.IsAudioFile(url))
             {
@@ -1064,14 +1162,6 @@ namespace OdinOnDemand.MPlayer
                 mScreen.url = relativeVideoUrl;
                 if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + relativeVideoUrl);
                 BeginLoadingPrepare();
-                return;
-            }
-
-            if ((url.StartsWith("http://") || url.StartsWith("https://")) &&
-                OODConfig.IsYtEnabled.Value && !Path.HasExtension(url))
-            {
-                PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Youtube;
-                PlayYoutube(url, generation);
                 return;
             }
 
@@ -1121,7 +1211,7 @@ namespace OdinOnDemand.MPlayer
                     if (generation != playbackGeneration) return;
                     if (streams != null && !string.IsNullOrEmpty(streams.VideoUrl))
                     {
-                        PrepareYoutubeBackend(streams, generation);
+                        PrepareVlcBackend(streams.VideoUrl, streams.AudioUrl, generation, streams.Headers);
                         return;
                     }
 
@@ -1196,7 +1286,7 @@ namespace OdinOnDemand.MPlayer
 
             // Pass the extractor's strings through untouched: Uri canonicalization rewrites
             // percent-escapes in signed stream URLs and gets them rejected.
-            PrepareYoutubeBackend(new YoutubeStreams(lines[0], audioUrl), generation);
+            PrepareVlcBackend(lines[0], audioUrl, generation);
         }
         
         public void UpdatePlayerTime(float time)
@@ -1215,7 +1305,7 @@ namespace OdinOnDemand.MPlayer
                 return;
             }
 
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            if (UsesVlcBackend())
                 return;
 
             if (IsVideoLink())

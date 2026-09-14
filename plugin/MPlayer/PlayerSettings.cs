@@ -60,6 +60,8 @@ namespace OdinOnDemand.MPlayer
             Audio,
             RelativeAudio,
             RelativeVideo,
+            NetworkStream,
+            Twitch,
         }
 
         public enum PlayerMode

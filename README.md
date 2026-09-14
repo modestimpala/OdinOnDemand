@@ -49,6 +49,7 @@ If you are enjoying the mod, please consider donating to my Ko-Fi.
   - Cart - "Bard's Wagon",  buildable. Used by pointing and clicking with remote control.
   - Belt - "Skald's Girdle", purchased from Haldor, with configurable recipe. Used by equipping & using remote control when pointing at empty space, e.g. not at a mediaplayer. Admins can point and click at other user's Belt and open it's menu.
 - YouTube playlist support
+- Online radio streams and Twitch channels (Twitch requires optional Streamlink on each client).
 - Wide website support: Vimeo, TikTok, Dailymotion, Facebook, Instagram, Twitter, reddit, etc. Just try your site of choice and it may return a valid file.
 - Unique dynamic radio stations system with easy radio addon support 
 - New Music Waveform Visualizer 
@@ -75,13 +76,27 @@ YouTube playback uses yt-dlp (single videos), YoutubeExplode (playlists), and VL
 
 High-quality playback requires the packaged **LibVLCSharp 3.10.1**, **LibVLC 3.0.23**, and complete `libvlc/win-x64/` directory beside `OdinOnDemand.dll` on every client. Copying only the plugin DLL is not enough. 
 
+### Online radio and Twitch
+
+Paste the URL into any player's normal URL field:
+
+- **Radio:** a direct HTTP(S) station stream, for example `https://caster04.streampakket.com/proxy/8982/CeltCast`. VLC streams the audio without downloading the entire broadcast; no filename extension, yt-dlp, or Streamlink is required.
+- **Twitch:** a channel URL such as `https://www.twitch.tv/barny`. Install [Streamlink](https://streamlink.github.io/install.html) on each listening/watching client. The cog menu shows whether it was detected. Streamlink resolves the channel, then the packaged VLC runtime plays its HLS stream; no external player is opened.
+  - **Windows:** put `streamlink.exe` on `PATH`, beside `OdinOnDemand.dll`, or in the game directory. Restart the game after changing `PATH`.
+  - **Wine/Proton:** a Windows Streamlink installation also works. Alternatively, OOD detects Linux Streamlink in `/usr/bin`, `/usr/local/bin`, or `$HOME/.local/bin`, with host Python 3 at `/usr/bin/python3` or `/bin/python3`. It invokes a short-lived host bridge using Wine's `start /unix`; you do not need to add Linux paths to Windows `PATH`. Custom Linux install locations outside these directories are not detected.
+  - **Max Quality** also caps Twitch resolution. If no video fits, an available audio-only stream is used. Offline/restricted channels and missing Streamlink produce an error; radio and YouTube remain independent of Streamlink.
+
+Live broadcasts have no shared seekable position. Pause mutes/freezes this player's output while the stream continues; resume rejoins the live feed. Each multiplayer client resolves the original channel/station URL locally, so live latency can differ between clients. Ordinary finite media retains seek/time synchronization.
+
+Keep the complete updated `libvlc/win-x64` folder: Twitch needs the packaged adaptive HLS and MPEG-TS modules, not just an updated plugin DLL.
+
 ## Use
 
 ### MediaPlayers
 In game, place down a mediaplayer. Interact with it to open the GUI.
 
 #### Remote Playback
-You can paste direct links into the URL field to play online remote files. The linked file should be of a [compatible codec](https://docs.unity3d.com/2020.1/Documentation/Manual/VideoSources-FileCompatibility.html).
+You can paste direct HTTP(S) audio/video stream URLs into the URL field; these use the packaged VLC decoder. Website pages identified by their HTML response still use the configured yt-dlp backend.
 You can also paste youtube/youtu.be links and the plugin will process this for you on all mediaplayers.
 
 All mediaplayers have the added ability to play audio files of [compatible codecs](https://support.unity.com/hc/en-us/articles/206484803-What-are-the-supported-Audio-formats-in-Unity-), as well as soundcloud.com links - some SoundCloud songs are unavailable, depending on the artist and how they upload/license their art.
@@ -192,6 +207,26 @@ Once a player initiates playback of a station via a mediaplayer, they receive th
 
 Starting with OOD 1.0, config files are now stored in BepInEx\config\OdinOnDemand\
 The config includes settings for YouTube API selection, volume control, distance parameters for audio playback, server and client-side configurations, remote control functionalities, VIP mode settings, and audio fade options. It allows for extensive customization of media player behavior in the game, including options for enabling or disabling certain features, adjusting volumes, setting distances for audio reception, and specifying admin-only settings.
+
+### VLC audio diagnostics
+
+For an audio-popping test, set `Decoder Audio Stats = true` in the existing `[YouTube]` section of `BepInEx/config/OdinOnDemand/config.cfg` before launching:
+
+```ini
+[YouTube]
+Decoder Audio Stats = true
+```
+
+This client-side option defaults to `false` and applies to VLC playback, including YouTube, radio, and Twitch. It writes `[VLC audio #N]` summaries to the BepInEx log (`BepInEx/LogOutput.log`) every five seconds, plus snapshots on playback end or shutdown. Each playback session has its own ID. Counters are cumulative since enabling collection; compare consecutive summaries for activity during an interval. Live changes to the config entry also take effect during playback, but editing the file alone does not reload it.
+
+The header records the PCM format, Unity output rate, and DSP buffer configuration. Summaries include:
+
+- VLC/Unity callback counts and frames received, written to the queue, submitted to Unity, and requested by Unity. **Submitted does not mean audible**: these counters stop at the Unity PCM callback, before mixing, spatialization, and device output.
+- `underrunFrames` for an empty active queue, `scheduledSilenceFrames` for PCM whose presentation time is still in the future, and separate inactive read/write counts for paused or stopped output.
+- Late-frame drops, expired unconsumed frames, cleared queued frames, timestamp resets and maximum timestamp skew, reader-clock resets, flushes, redundant activation calls, position callbacks, and seeks. Preparation, pause, seek, and stop can legitimately increase reset/clear counts.
+- Current queue duration, the latest callback's estimated Unity prefetch duration, producer backpressure waits, maximum callback gaps, and the AudioSource's playing/virtualized state, pitch, and volume.
+
+No per-callback log messages or stream URLs are emitted by these diagnostics, and general **Debug Logging** is not required. Collection and summaries stop when disabled. Turn the option off after the test; review the rest of the log for sensitive information before sharing it.
 
 ## Recipes
 

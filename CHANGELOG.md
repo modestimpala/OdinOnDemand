@@ -4,13 +4,19 @@
 ### Versions:
 
 ## 1.2.0
+ - Added direct HTTP(S) online radio playback through VLC, including extensionless station URLs; HTML website links retain extractor routing.
+ - Added optional Streamlink detection and Twitch HLS playback, including Windows PATH and Linux-host Streamlink through Wine/Proton, with cog-menu status and Max Quality support.
+ - Added native HLS/MPEG-TS modules, output-gated live pause/resume, and nonseekable live synchronization handling; cancelled channel resolutions cannot restart a stopped or replaced source.
  - Updated interfaces, equipment hashes, and Harmony placement support for Valheim 1.0; restored the **OdinOnDemand** build-menu group using usage tags.
  - Added cog settings for **Max Quality** (360p-2160p, default 1080p) and persisted **Use Nightly yt-dlp**, plus a fixed-height, scrollable settings layout.
  - Added **External JS** runtime status, setup guidance, yt-dlp warnings, and `--js-runtimes` support for node, bun, and qjs.
  - Improved YouTube playback with bounded HTTP range requests, split-first H.264/AAC format selection, untouched signed URLs, and clearer unavailable-media errors.
  - Added packaged Windows x64 LibVLC streaming for separate video/audio, including Proton, without full downloads or remuxing.
- - Shared one LibVLC instance across players and reduced packaged modules from 101 MB to 28 MB; replace the entire `libvlc` folder when updating.
+ - Shared one LibVLC instance across players and trimmed packaged modules to those needed for playback; replace the entire `libvlc` folder when updating.
  - Improved Unity video/audio output, fixing a native buffer over-read and playback timing issues.
+ - Preserved YouTube audio continuity across streaming-clip loops and packet timestamp jitter, while retaining resynchronization after underruns, flushes, and large clock jumps.
+ - Explicitly selected the packaged Speex audio resampler to prevent fractional-frame truncation, accumulated 44.1-to-48 kHz timestamp drift, and periodic PCM queue resets.
+ - Added opt-in client-side **Decoder Audio Stats** with periodic URL-free VLC/Unity PCM counters, underrun/drop/reset causes, and playback-session IDs.
  - Unified playback, seeking, looping, playlists, and source changes around the decoder clock, preventing stale extraction results from restarting stopped players.
  - Fixed RPC pause/position synchronization while preserving artwork, gramophone animations, station timers, and direct extensionless URLs.
  - Migrated YoutubeExplode from System.Text.Json to Newtonsoft.Json.

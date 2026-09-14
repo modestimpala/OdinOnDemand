@@ -49,6 +49,7 @@ namespace OdinOnDemand.Utils.UI
         private Toggle _nightlyYtDlpToggle;
         private Text _maxHeightLabel;
         private Text _externalJsStatusText;
+        private Text _streamlinkStatusText;
         private GameObject _externalJsGuideButtonObj;
         internal Image RadioPanelThumbnail;
         
@@ -589,6 +590,7 @@ namespace OdinOnDemand.Utils.UI
                 if (_nightlyYtDlpToggle) _nightlyYtDlpToggle.SetIsOnWithoutNotify(OODConfig.UseNightlyYtDlp.Value);
                 if (_maxHeightLabel) _maxHeightLabel.text = MaxHeightLabelText();
                 UpdateExternalJsStatus();
+                UpdateStreamlinkStatus();
             }
             UpdateSpeakerCount();
             _settingsPanelObj.SetActive(_basePlayer.PlayerSettings.IsSettingsGuiActive);
@@ -811,6 +813,9 @@ namespace OdinOnDemand.Utils.UI
                 Application.OpenURL(ExternalJsRuntime.SetupGuideUrl);
             });
             UpdateExternalJsStatus();
+            var streamlinkRow = CreateSettingsRow(contentTransform, 34f);
+            _streamlinkStatusText = CreateRowLabel(streamlinkRow, "", 330f);
+            UpdateStreamlinkStatus();
         }
 
         /// <summary>Full-width settings row with a fixed height the layout group honours.</summary>
@@ -973,6 +978,18 @@ namespace OdinOnDemand.Utils.UI
                 : "External JS: not detected, formats limited";
             _externalJsStatusText.color = GUIManager.Instance.ValheimOrange;
             if (_externalJsGuideButtonObj) _externalJsGuideButtonObj.SetActive(true);
+        }
+
+        private void UpdateStreamlinkStatus()
+        {
+            if (!_streamlinkStatusText) return;
+            StreamlinkRuntime.Refresh();
+            _streamlinkStatusText.text = StreamlinkRuntime.Detected
+                ? "Twitch: Streamlink detected"
+                : "Twitch: install Streamlink on PATH";
+            _streamlinkStatusText.color = StreamlinkRuntime.Detected
+                ? new Color(0.4f, 0.85f, 0.4f)
+                : GUIManager.Instance.ValheimOrange;
         }
 
         private void ToggleLock()

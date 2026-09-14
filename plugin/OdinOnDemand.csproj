@@ -75,6 +75,7 @@
         <Compile Include="Utils\Net\Explode\Async.cs" />
         <Compile Include="Utils\Net\Explode\DLSharp.cs" />
         <Compile Include="Utils\Net\Explode\ExternalJsRuntime.cs" />
+        <Compile Include="Utils\Net\Explode\StreamlinkRuntime.cs" />
         <Compile Include="Utils\Net\Explode\UrlGrab.cs" />
         <Compile Include="Utils\Net\RpcHandler.cs" />
         <Compile Include="Utils\UI\AudioWaveformVisualizer.cs" />
@@ -578,6 +579,8 @@
         <VlcWindowsX64IncludeFiles Include="plugins\codec\libopus_plugin.dll" />
         <VlcWindowsX64IncludeFiles Include="plugins\codec\libvorbis_plugin.dll" />
         <VlcWindowsX64IncludeFiles Include="plugins\demux\libes_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\demux\libadaptive_plugin.dll" />
+        <VlcWindowsX64IncludeFiles Include="plugins\demux\libts_plugin.dll" />
         <VlcWindowsX64IncludeFiles Include="plugins\demux\libh26x_plugin.dll" />
         <VlcWindowsX64IncludeFiles Include="plugins\demux\libmp4_plugin.dll" />
         <VlcWindowsX64IncludeFiles Include="plugins\demux\libogg_plugin.dll" />
