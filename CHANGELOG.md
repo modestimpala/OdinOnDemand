@@ -3,13 +3,27 @@
 
 ### Versions:
 
+## 1.2.5
+ - Added online radio playback through VLC with support for station URLs without file extensions, with waveform support. Thanks isimp for the suggestion. 
+ - Added optional Streamlink detection, adding in full support for Twitch and Kick playback!
+ - Added a fallback YouTube extraction client.
+ - Fixed external runtimes not being detected when they were added to `PATH` after Steam started.
+ - Fixed registry-discovered Deno being shown as available without passing its executable path to yt-dlp.
+ - Sped up YouTube loading by no longer checking for a yt-dlp update before every video. It now checks once per player instance, or after a setting change.
+ - Changed the LibVLC audio resampler from "ugly" to "speex":
+  - Fixed YouTube audio drifting out of sync or cutting out during long playback.
+  - Fixed gradual audio desync on 44.1 kHz sources.
+ - Added an optional **Decoder Audio Stats** setting that logs audio diagnostics for bug reports.
+ - Added a now-playing readout to the player panel: title with elapsed/total time, or `LIVE` for endless streams.
+ - Made the player panel taller so the info rows clear the Loop button, and errors now stay readable for 8 seconds.
+
 ## 1.2.0
  - Updated interfaces, equipment hashes, and Harmony placement support for Valheim 1.0; restored the **OdinOnDemand** build-menu group using usage tags.
  - Added cog settings for **Max Quality** (360p-2160p, default 1080p) and persisted **Use Nightly yt-dlp**, plus a fixed-height, scrollable settings layout.
  - Added **External JS** runtime status, setup guidance, yt-dlp warnings, and `--js-runtimes` support for node, bun, and qjs.
  - Improved YouTube playback with bounded HTTP range requests, split-first H.264/AAC format selection, untouched signed URLs, and clearer unavailable-media errors.
  - Added packaged Windows x64 LibVLC streaming for separate video/audio, including Proton, without full downloads or remuxing.
- - Shared one LibVLC instance across players and reduced packaged modules from 101 MB to 28 MB; replace the entire `libvlc` folder when updating.
+ - Shared one LibVLC instance across players and trimmed packaged modules to those needed for playback; replace the entire `libvlc` folder when updating.
  - Improved Unity video/audio output, fixing a native buffer over-read and playback timing issues.
  - Unified playback, seeking, looping, playlists, and source changes around the decoder clock, preventing stale extraction results from restarting stopped players.
  - Fixed RPC pause/position synchronization while preserving artwork, gramophone animations, station timers, and direct extensionless URLs.

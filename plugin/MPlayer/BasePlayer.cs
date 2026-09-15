@@ -3,7 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
+using System.Threading;
 using OdinOnDemand.Components;
 using OdinOnDemand.Dynamic;
 using OdinOnDemand.Interfaces;
@@ -47,6 +49,12 @@ namespace OdinOnDemand.MPlayer
         private bool hasPendingPlaybackTime;
         private bool youtubeBackendActive;
         private bool youtubeLoading;
+        private CancellationTokenSource networkCancellation;
+        private float indicatorHoldUntil;
+        private Coroutine videoOutputWatch;
+
+        /// <summary>How long after preparing to keep watching for a late video format.</summary>
+        private const float VideoOutputWatchSeconds = 3f;
 
 // Playlist Management
         public int PlaylistPosition { get; set; }
@@ -131,6 +139,7 @@ namespace OdinOnDemand.MPlayer
         public void OnDestroy()
         {
             playbackGeneration++;
+            CancelNetworkPreparation();
             DestroyYoutubeBackend();
             if (mScreen != null)
             {
@@ -143,7 +152,7 @@ namespace OdinOnDemand.MPlayer
 
         private void EndReached(VideoPlayer source)
         {
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube) return;
+            if (UsesVlcBackend()) return;
             HandlePlaybackEnded();
         }
 
@@ -193,7 +202,7 @@ namespace OdinOnDemand.MPlayer
 
         private void ScreenPrepareCompleted(VideoPlayer source)
         {
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube) return;
+            if (UsesVlcBackend()) return;
             CompletePreparation();
         }
 
@@ -231,11 +240,34 @@ namespace OdinOnDemand.MPlayer
             PlayCurrentBackend();
             if (Animator) Animator.SetBool(PlayerSettings.Playing, true);
             if (WaveParticleSystem && OODConfig.MobilePlayerVisuals.Value) WaveParticleSystem.Play();
+            // Audio-only VLC sources (radio, audio_only live) show the radio panel and waveform
+            // instead of a blank screen.
+            UpdateRadioPanel();
+            if (videoOutputWatch != null) StopCoroutine(videoOutputWatch);
+            videoOutputWatch = StartCoroutine(WatchForVideoOutput(playbackGeneration));
+        }
+
+        /// <summary>
+        ///     A live source can report Playing before LibVLC negotiates its video format, so the
+        ///     radio panel shows for anything that still looks audio-only and steps aside as soon
+        ///     as video actually arrives.
+        /// </summary>
+        private IEnumerator WatchForVideoOutput(int generation)
+        {
+            var deadline = Time.time + VideoOutputWatchSeconds;
+            while (Time.time < deadline)
+            {
+                yield return new WaitForSeconds(0.25f);
+                if (generation != playbackGeneration) yield break;
+                if (!HasVideoContent()) continue;
+                if (RadioPanelObj) RadioPanelObj.SetActive(false);
+                yield break;
+            }
         }
 
         private void ScreenErrorReceived(VideoPlayer source, string message)
         {
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube) return;
+            if (UsesVlcBackend()) return;
             HandlePlaybackError(message);
         }
 
@@ -262,8 +294,19 @@ namespace OdinOnDemand.MPlayer
             if (UIController.LoadingIndicatorObj)
             {
                 UIController.SetLoadingIndicatorText("Failed to load media");
+                HoldLoadingIndicator();
                 StartCoroutine(ResetLoadingIndicatorAfterDelay(playbackGeneration));
             }
+        }
+
+        /// <summary>
+        ///     Keeps a message on the loading indicator. The twice-a-second loading tick hides the
+        ///     indicator as soon as nothing is loading, which is what cut error text short.
+        /// </summary>
+        internal void HoldLoadingIndicator()
+        {
+            indicatorHoldUntil = Time.time + Utils.UI.UIController.ErrorMessageSeconds;
+            UIController.SetLoadingIndicatorActive(true);
         }
 
         public double PlaybackTime
@@ -272,7 +315,7 @@ namespace OdinOnDemand.MPlayer
             {
                 if (youtubeBackendActive && youtubeDecoder != null)
                     return youtubeDecoder.Time;
-                if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+                if (UsesVlcBackend())
                     return hasPendingPlaybackTime ? pendingPlaybackTime : 0d;
                 if (IsVideoLink())
                     return mScreen != null ? mScreen.time : 0d;
@@ -280,6 +323,30 @@ namespace OdinOnDemand.MPlayer
                     return mAudio.time;
                 return hasPendingPlaybackTime ? pendingPlaybackTime : 0d;
             }
+        }
+
+        /// <summary>Total length of the current media in seconds; 0 when live or unknown.</summary>
+        public double PlaybackDuration
+        {
+            get
+            {
+                if (youtubeBackendActive && youtubeDecoder != null)
+                    return youtubeDecoder.Length;
+                if (UsesVlcBackend())
+                    return 0d;
+                if (IsVideoLink())
+                    return mScreen != null ? mScreen.length : 0d;
+                return mAudio != null && mAudio.clip != null ? mAudio.clip.length : 0d;
+            }
+        }
+
+        /// <summary>"Kick: xqc" - the service plus the channel segment of a live URL.</summary>
+        private static string LiveChannelTitle(string service, Uri uri)
+        {
+            var channel = uri.AbsolutePath.Trim('/');
+            var slash = channel.IndexOf('/');
+            if (slash > 0) channel = channel.Substring(0, slash);
+            return channel.Length == 0 ? service : service + ": " + channel;
         }
 
         public bool IsVideoPlaying => IsVideoLink() && IsPlaybackPlaying();
@@ -291,24 +358,41 @@ namespace OdinOnDemand.MPlayer
                 youtubeDecoder.IsLooping = looping && !PlayerSettings.IsPlayingPlaylist;
                 return;
             }
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube) return;
+            if (UsesVlcBackend()) return;
 
             if (mScreen != null) mScreen.isLooping = looping && !PlayerSettings.IsPlayingPlaylist;
             if (mAudio != null) mAudio.loop = looping;
         }
 
-        private bool IsVideoLink()
+        private bool UsesVlcBackend()
         {
             return PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube ||
+                   PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.NetworkStream ||
+                   PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.LiveChannel;
+        }
+
+        private bool IsVideoLink()
+        {
+            return UsesVlcBackend() ||
                    PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.RelativeVideo ||
                    PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Video;
+        }
+
+        /// <summary>
+        ///     True when the playing source really carries video. A VLC link type only means video
+        ///     is possible: internet radio and audio-only live streams arrive over the same path.
+        /// </summary>
+        private bool HasVideoContent()
+        {
+            if (youtubeBackendActive && youtubeDecoder != null) return youtubeDecoder.HasVideoTrack;
+            return IsVideoLink();
         }
 
         private bool IsPlaybackPlaying()
         {
             if (youtubeBackendActive && youtubeDecoder != null)
                 return youtubeDecoder.IsPlaying;
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            if (UsesVlcBackend())
                 return false;
             if (IsVideoLink())
                 return mScreen != null && mScreen.isPlaying;
@@ -319,7 +403,7 @@ namespace OdinOnDemand.MPlayer
         {
             if (youtubeBackendActive && youtubeDecoder != null)
                 return youtubeDecoder.IsPrepared;
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            if (UsesVlcBackend())
                 return false;
             if (IsVideoLink())
                 return mScreen != null && mScreen.isPrepared;
@@ -330,7 +414,7 @@ namespace OdinOnDemand.MPlayer
         {
             if (youtubeBackendActive && youtubeDecoder != null)
                 return youtubeDecoder.IsLooping;
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            if (UsesVlcBackend())
                 return PlayerSettings.IsLooping;
             if (IsVideoLink())
                 return mScreen != null && mScreen.isLooping;
@@ -344,7 +428,7 @@ namespace OdinOnDemand.MPlayer
                 if (youtubeDecoder.IsPrepared) youtubeDecoder.Play();
                 return;
             }
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            if (UsesVlcBackend())
                 return;
 
             if (IsVideoLink())
@@ -365,7 +449,7 @@ namespace OdinOnDemand.MPlayer
                 if (youtubeDecoder.IsPrepared) youtubeDecoder.Pause();
                 return;
             }
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            if (UsesVlcBackend())
                 return;
 
             if (IsVideoLink())
@@ -385,7 +469,7 @@ namespace OdinOnDemand.MPlayer
                 if (!youtubeDecoder.IsPrepared) return;
                 youtubeDecoder.Time = pendingPlaybackTime;
             }
-            else if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            else if (UsesVlcBackend())
             {
                 return;
             }
@@ -409,6 +493,7 @@ namespace OdinOnDemand.MPlayer
         private int BeginSourceSwitch(double initialTime)
         {
             playbackGeneration++;
+            CancelNetworkPreparation();
             DestroyYoutubeBackend();
             if (DynamicStationCoroutine != null)
             {
@@ -452,9 +537,10 @@ namespace OdinOnDemand.MPlayer
             youtubeDecoder = null;
         }
 
-        private void PrepareYoutubeBackend(YoutubeStreams streams, int generation)
+        private void PrepareVlcBackend(string videoUrl, string audioUrl, int generation,
+            IDictionary<string, string> headers = null, bool useChunkedInput = true, bool isLive = false)
         {
-            if (generation != playbackGeneration || PlayerSettings.PlayerLinkType != PlayerSettings.LinkType.Youtube)
+            if (generation != playbackGeneration || !UsesVlcBackend())
                 return;
 
             DestroyYoutubeBackend();
@@ -481,17 +567,178 @@ namespace OdinOnDemand.MPlayer
             try
             {
                 youtubeDecoder.Prepare(
-                    streams.VideoUrl,
-                    streams.AudioUrl,
+                    videoUrl,
+                    audioUrl,
                     mAudio,
                     mScreen != null ? mScreen.targetTexture : null,
-                    streams.Headers);
+                    headers,
+                    useChunkedInput,
+                    isLive);
             }
             catch (Exception exception)
             {
                 HandlePlaybackError(exception.Message);
                 DestroyYoutubeBackend();
             }
+        }
+
+        private void CancelNetworkPreparation()
+        {
+            networkCancellation?.Cancel();
+            networkCancellation = null;
+        }
+
+        private IEnumerator PlayLiveChannel(string url, string service, int generation)
+        {
+            youtubeLoading = true;
+            UIController.SetLoadingIndicatorText("Resolving " + service);
+            if (UIController.LoadingIndicatorObj) UIController.LoadingIndicatorObj.SetActive(true);
+            using (var cancellation = new CancellationTokenSource())
+            {
+                networkCancellation = cancellation;
+                var resolution = StreamlinkRuntime.ResolveAsync(url, OODConfig.MaxVideoHeight.Value,
+                    cancellation.Token);
+                yield return new WaitUntil(() => resolution.IsCompleted);
+                if (ReferenceEquals(networkCancellation, cancellation)) networkCancellation = null;
+                // Observe exceptions even when a newer source has superseded this request.
+                var error = resolution.Exception?.GetBaseException();
+                if (generation != playbackGeneration || resolution.IsCanceled) yield break;
+                if (error != null)
+                {
+                    HandlePlaybackError(error.Message);
+                    if (UIController.LoadingIndicatorObj)
+                        UIController.SetLoadingIndicatorText(error.Message);
+                    yield break;
+                }
+                PrepareVlcBackend(resolution.Result, null, generation, useChunkedInput: false, isLive: true);
+            }
+        }
+
+        private IEnumerator PrepareNetworkStream(string url, int generation)
+        {
+            youtubeLoading = true;
+            using (var cancellation = new CancellationTokenSource())
+            {
+                networkCancellation = cancellation;
+                cancellation.CancelAfter(TimeSpan.FromSeconds(10));
+                // Probe off-thread: an extensionless mount can be radio, HLS, a file or a website.
+                var probe = Task.Run(() => ProbeNetworkStream(url, cancellation.Token));
+                yield return new WaitUntil(() => probe.IsCompleted);
+                if (ReferenceEquals(networkCancellation, cancellation)) networkCancellation = null;
+                var error = probe.Exception?.GetBaseException();
+                if (generation != playbackGeneration) yield break;
+                if (error != null || probe.IsCanceled)
+                {
+                    HandlePlaybackError(error?.Message ?? "Network stream classification timed out.");
+                    yield break;
+                }
+                if (probe.Result == NetworkStreamKind.Website)
+                {
+                    PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Youtube;
+                    PlayYoutube(url, generation);
+                    yield break;
+                }
+                PrepareVlcBackend(url, null, generation, useChunkedInput: false,
+                    isLive: probe.Result == NetworkStreamKind.Live);
+            }
+        }
+
+        private enum NetworkStreamKind { Media, Live, Website }
+
+        private static NetworkStreamKind ProbeNetworkStream(string url, CancellationToken cancellationToken)
+        {
+            const int maxPlaylistBytes = 256 * 1024;
+            var uri = new Uri(url);
+            for (int depth = 0; depth < 4; depth++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var request = (HttpWebRequest)WebRequest.Create(uri);
+                request.Timeout = 10000;
+                request.ReadWriteTimeout = 10000;
+                request.MaximumAutomaticRedirections = 4;
+                request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                using (cancellationToken.Register(request.Abort))
+                using (var response = (HttpWebResponse)request.GetResponse())
+                {
+                    string contentType = response.ContentType ?? "";
+                    if (contentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) ||
+                        contentType.StartsWith("application/xhtml+xml", StringComparison.OrdinalIgnoreCase))
+                        return NetworkStreamKind.Website;
+                    if (response.Headers["icy-metaint"] != null || response.Headers["icy-name"] != null ||
+                        response.Headers["icy-br"] != null)
+                        return NetworkStreamKind.Live;
+
+                    using (var stream = response.GetResponseStream())
+                    {
+                        // Read only the signature for ordinary media, never buffer an open-ended feed.
+                        var prefix = new byte[10];
+                        int count = 0;
+                        while (count < prefix.Length)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            int read = stream.Read(prefix, count, prefix.Length - count);
+                            if (read == 0) break;
+                            count += read;
+                        }
+                        string signature = System.Text.Encoding.UTF8.GetString(prefix, 0, count).TrimStart('\uFEFF');
+                        if (!signature.StartsWith("#EXTM3U", StringComparison.Ordinal))
+                            return NetworkStreamKind.Media;
+
+                        string playlist;
+                        using (var buffer = new MemoryStream())
+                        {
+                            buffer.Write(prefix, 0, count);
+                            var chunk = new byte[4096];
+                            int read;
+                            while ((read = stream.Read(chunk, 0, chunk.Length)) > 0)
+                            {
+                                cancellationToken.ThrowIfCancellationRequested();
+                                if (buffer.Length + read > maxPlaylistBytes)
+                                    throw new InvalidDataException("HLS playlist exceeds the classification limit.");
+                                buffer.Write(chunk, 0, read);
+                            }
+                            playlist = System.Text.Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+                        }
+
+                        bool mediaPlaylist = false;
+                        bool finite = false;
+                        bool variantNext = false;
+                        string variant = null;
+                        string rendition = null;
+                        using (var lines = new StringReader(playlist))
+                        {
+                            string line;
+                            while ((line = lines.ReadLine()) != null)
+                            {
+                                line = line.Trim();
+                                if (line == "#EXT-X-ENDLIST" || line == "#EXT-X-PLAYLIST-TYPE:VOD")
+                                    finite = true;
+                                if (line.StartsWith("#EXT-X-TARGETDURATION:", StringComparison.Ordinal))
+                                    mediaPlaylist = true;
+                                if (line.StartsWith("#EXT-X-STREAM-INF:", StringComparison.Ordinal))
+                                    variantNext = true;
+                                else if (variantNext && line.Length > 0 && line[0] != '#')
+                                {
+                                    if (variant == null) variant = line;
+                                    variantNext = false;
+                                }
+                                else if (rendition == null && line.StartsWith("#EXT-X-MEDIA:", StringComparison.Ordinal))
+                                {
+                                    var match = System.Text.RegularExpressions.Regex.Match(line, "[:,]URI=\"([^\"]+)\"");
+                                    if (match.Success) rendition = match.Groups[1].Value;
+                                }
+                            }
+                        }
+                        if (mediaPlaylist)
+                            return finite ? NetworkStreamKind.Media : NetworkStreamKind.Live;
+                        string child = variant ?? rendition;
+                        if (child == null || !Uri.TryCreate(response.ResponseUri, child, out uri) ||
+                            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                            throw new InvalidDataException("HLS playlist has no supported media variant.");
+                    }
+                }
+            }
+            throw new InvalidDataException("HLS playlist nesting exceeds the classification limit.");
         }
 
         private void UpdateChecks() //1second checks, screen render distance, master volume updates and playlist gui updates
@@ -517,19 +764,8 @@ namespace OdinOnDemand.MPlayer
                         OODConfig.MasterVolumeMusicplayer.Value);
             }
 
-            //Playlist GUI checks and updates
-            if (UIController.URLPanelObj)
-            {
-                if (PlayerSettings.IsPlayingPlaylist)
-                {
-                    UIController.UpdatePlaylistUI();
-                    UIController.PlaylistTrackText.text = PlaylistString;
-                }
-                else
-                {
-                    UIController.UpdatePlaylistUI();
-                }
-            }
+            //Playlist track or media info rows in the URL panel
+            UIController.UpdateMediaInfo();
 
             if (!IsPlaybackPlaying() && !IsPlaybackLooping() && (!IsVideoLink() || !IsPlaybackPrepared()))
             {
@@ -546,7 +782,7 @@ namespace OdinOnDemand.MPlayer
         {
             System.Text.Encoding encoding = System.Text.Encoding.UTF8;
             byte[] bytes = encoding.GetBytes(url);
-            url = encoding.GetString(bytes);
+            url = StreamlinkRuntime.NormalizeChannelUrl(encoding.GetString(bytes));
             UnparsedURL = url; //Save the unparsed url for later use
             if (UnparsedURL == "")
             {
@@ -708,6 +944,7 @@ namespace OdinOnDemand.MPlayer
             PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Audio;
             PlayerSettings.CurrentMode = PlayerSettings.PlayerMode.Dynamic;
             UnparsedURL = PlayerSettings.DynamicStation.Title;
+            PlayerSettings.MediaTitle = PlayerSettings.DynamicStation.Title;
             float remainingTime = clip.AudioClip.length - mAudio.time;
             DynamicStationCoroutine = StartCoroutine(AudioEndEvent(remainingTime, PlayNextDynamicStationTrack));
             if (WaveParticleSystem) WaveParticleSystem.Play();
@@ -740,30 +977,26 @@ namespace OdinOnDemand.MPlayer
         
         public void UpdateRadioPanel()
         {
-            if (RadioPanelObj && UIController.RadioPanelThumbnail && IsPlaybackPlaying())
-            {
-                if(ScreenUICanvasObj) ScreenUICanvasObj.SetActive(true);
-                if(ScreenPlaneObj) ScreenPlaneObj.SetActive(true);
-                ClearRenderTexture(mScreen.targetTexture);
-                if (PlayerSettings.DynamicStation != null && PlayerSettings.CurrentMode == PlayerSettings.PlayerMode.Dynamic)
-                {
-                    RadioPanelObj.SetActive(true);
-                    // TODO title ??
-                    //var title = RadioPanelObj.transform.Find("Title").GetComponent<Text>();
-                    //title.text = PlayerSettings.DynamicStation.Title;
+            if (!RadioPanelObj || !UIController.RadioPanelThumbnail) return;
+            // Prepared, not playing: LibVLC reports a live source as playing only once its first
+            // buffer lands, so gating on the play state dropped the panel on the first load.
+            if (!IsPlaybackPlaying() && !IsPlaybackPrepared()) return;
 
-                    UIController.RadioPanelThumbnail.sprite = PlayerSettings.DynamicStation.Thumbnail != null ? PlayerSettings.DynamicStation.Thumbnail : null;
-                }
-                else if (mAudio.isPlaying && !IsVideoLink())
-                {
-                    RadioPanelObj.SetActive(true);
-                    UIController.RadioPanelThumbnail.sprite = PlayerSettings.Thumbnail != null ? PlayerSettings.Thumbnail : null;
-                }
-                else if (IsVideoLink())
-                {
-                    RadioPanelObj.SetActive(false);
-                }
+            var station = PlayerSettings.DynamicStation != null &&
+                          PlayerSettings.CurrentMode == PlayerSettings.PlayerMode.Dynamic;
+            if (!station && HasVideoContent())
+            {
+                RadioPanelObj.SetActive(false);
+                return;
             }
+
+            if (ScreenUICanvasObj) ScreenUICanvasObj.SetActive(true);
+            if (ScreenPlaneObj) ScreenPlaneObj.SetActive(true);
+            // Wipe the last video frame only when the panel actually takes over the screen.
+            if (mScreen != null) ClearRenderTexture(mScreen.targetTexture);
+            RadioPanelObj.SetActive(true);
+            UIController.RadioPanelThumbnail.sprite =
+                station ? PlayerSettings.DynamicStation.Thumbnail : PlayerSettings.Thumbnail;
         }
 
         public void Pause(bool isRPC = false)
@@ -850,7 +1083,8 @@ namespace OdinOnDemand.MPlayer
                         UIController.LoadingMessages[loadingMessageIndex];
                 PlayerSettings.LoadingCount++;
             }
-            else if (UIController.LoadingIndicatorObj && UIController.LoadingIndicatorObj.activeSelf)
+            else if (Time.time >= indicatorHoldUntil &&
+                     UIController.LoadingIndicatorObj && UIController.LoadingIndicatorObj.activeSelf)
             {
                 UIController.SetLoadingIndicatorActive(false);
             }
@@ -960,7 +1194,7 @@ namespace OdinOnDemand.MPlayer
             UIController.SetLoadingIndicatorActive(true);
             if (sentUrl != null)
             {
-                StartCoroutine(URLGrab.GetSoundcloudExplodeCoroutine(url, (resultUrl, artworkUri) =>
+                StartCoroutine(URLGrab.GetSoundcloudExplodeCoroutine(url, (resultUrl, artworkUri, title) =>
                 {
                     if (generation != playbackGeneration) return;
                     if (resultUrl != null)
@@ -969,6 +1203,7 @@ namespace OdinOnDemand.MPlayer
                             StartCoroutine(CreateThumbnailFromURL(artworkUri, generation));
                         else
                             PlayerSettings.Thumbnail = null;
+                        if (!string.IsNullOrEmpty(title)) PlayerSettings.MediaTitle = title;
                         StartCoroutine(AudioWebRequest(resultUrl, generation));
                     }
                     else
@@ -996,6 +1231,7 @@ namespace OdinOnDemand.MPlayer
             if (URLGrab.LoadingBool || generation != playbackGeneration) return;
             if (!OODConfig.IsYtEnabled.Value)
             {
+                youtubeLoading = false;
                 PlayerSettings.IsPlaying = false;
                 StartCoroutine(UIController.UnavailableIndicator("YouTube disabled"));
                 return;
@@ -1012,7 +1248,7 @@ namespace OdinOnDemand.MPlayer
             if (url == null) return;
             System.Text.Encoding encoding = System.Text.Encoding.UTF8;
             byte[] bytes = encoding.GetBytes(url);
-            url = encoding.GetString(bytes);
+            url = StreamlinkRuntime.NormalizeChannelUrl(encoding.GetString(bytes));
             if (string.IsNullOrEmpty(url))
             {
                 Stop(true);
@@ -1022,11 +1258,44 @@ namespace OdinOnDemand.MPlayer
             UnparsedURL = url;
             PlayerSettings.CurrentMode = PlayerSettings.PlayerMode.URL;
             PlayerSettings.DynamicStation = null;
+            PlayerSettings.MediaTitle = null;
             PlayerSettings.IsPaused = isPaused;
             PlayerSettings.IsPlaying = true;
             URLGrab.Reset();
             int generation = BeginSourceSwitch(time);
             ClearRenderTexture(mScreen.targetTexture);
+
+            if (Uri.TryCreate(url, UriKind.Absolute, out var networkUri) &&
+                (networkUri.Scheme == Uri.UriSchemeHttp || networkUri.Scheme == Uri.UriSchemeHttps))
+            {
+                string host = networkUri.Host;
+                if (host.Equals("youtube.com", StringComparison.OrdinalIgnoreCase) ||
+                    host.EndsWith(".youtube.com", StringComparison.OrdinalIgnoreCase) ||
+                    host.Equals("youtu.be", StringComparison.OrdinalIgnoreCase) ||
+                    host.Equals("youtube-nocookie.com", StringComparison.OrdinalIgnoreCase) ||
+                    host.EndsWith(".youtube-nocookie.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Youtube;
+                    PlayYoutube(url, generation);
+                    return;
+                }
+                var liveService = StreamlinkRuntime.ServiceName(networkUri);
+                if (liveService != null)
+                {
+                    PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.LiveChannel;
+                    PlayerSettings.MediaTitle = LiveChannelTitle(liveService, networkUri);
+                    StartCoroutine(PlayLiveChannel(url, liveService, generation));
+                    return;
+                }
+                if (!host.Equals("soundcloud.com", StringComparison.OrdinalIgnoreCase) &&
+                    !host.EndsWith(".soundcloud.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.NetworkStream;
+                    DownloadURL = networkUri;
+                    StartCoroutine(PrepareNetworkStream(url, generation));
+                    return;
+                }
+            }
 
             if (URLGrab.IsAudioFile(url))
             {
@@ -1064,14 +1333,6 @@ namespace OdinOnDemand.MPlayer
                 mScreen.url = relativeVideoUrl;
                 if (OODConfig.DebugEnabled.Value) Logger.LogDebug("Playing: " + relativeVideoUrl);
                 BeginLoadingPrepare();
-                return;
-            }
-
-            if ((url.StartsWith("http://") || url.StartsWith("https://")) &&
-                OODConfig.IsYtEnabled.Value && !Path.HasExtension(url))
-            {
-                PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Youtube;
-                PlayYoutube(url, generation);
                 return;
             }
 
@@ -1121,7 +1382,8 @@ namespace OdinOnDemand.MPlayer
                     if (generation != playbackGeneration) return;
                     if (streams != null && !string.IsNullOrEmpty(streams.VideoUrl))
                     {
-                        PrepareYoutubeBackend(streams, generation);
+                        if (streams.Title != null) PlayerSettings.MediaTitle = streams.Title;
+                        PrepareVlcBackend(streams.VideoUrl, streams.AudioUrl, generation, streams.Headers);
                         return;
                     }
 
@@ -1133,7 +1395,8 @@ namespace OdinOnDemand.MPlayer
         
         private IEnumerator ResetLoadingIndicatorAfterDelay(int generation)
         {
-            yield return new WaitForSeconds(1.75f);
+            yield return new WaitForSeconds(Utils.UI.UIController.ErrorMessageSeconds);
+            indicatorHoldUntil = 0f;
             if (generation != playbackGeneration) yield break;
             UIController.ResetLoadingIndicator();
         }
@@ -1196,7 +1459,7 @@ namespace OdinOnDemand.MPlayer
 
             // Pass the extractor's strings through untouched: Uri canonicalization rewrites
             // percent-escapes in signed stream URLs and gets them rejected.
-            PrepareYoutubeBackend(new YoutubeStreams(lines[0], audioUrl), generation);
+            PrepareVlcBackend(lines[0], audioUrl, generation);
         }
         
         public void UpdatePlayerTime(float time)
@@ -1215,7 +1478,7 @@ namespace OdinOnDemand.MPlayer
                 return;
             }
 
-            if (PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube)
+            if (UsesVlcBackend())
                 return;
 
             if (IsVideoLink())

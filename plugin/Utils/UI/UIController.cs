@@ -28,6 +28,7 @@ namespace OdinOnDemand.Utils.UI
         private GameObject _mutedVolumeObj;
         private DefaultControls.Resources _oodResources;
         private GameObject _playlistIndexObj;
+        private Text _playlistIndexText;
         private GameObject _playlistStringObj;
         internal Text PlaylistTrackText;
         private GameObject _previousPlaylistTrackObj;
@@ -49,6 +50,7 @@ namespace OdinOnDemand.Utils.UI
         private Toggle _nightlyYtDlpToggle;
         private Text _maxHeightLabel;
         private Text _externalJsStatusText;
+        private Text _streamlinkStatusText;
         private GameObject _externalJsGuideButtonObj;
         internal Image RadioPanelThumbnail;
         
@@ -134,7 +136,7 @@ namespace OdinOnDemand.Utils.UI
                         _basePlayer.PlaylistString = _basePlayer.PlaylistString = _basePlayer.CurrentPlaylist.ElementAt(_basePlayer.PlaylistPosition).Title;
                         _basePlayer.PlaylistString = "Playing '" + _basePlayer.CurrentPlaylist.ElementAt(_basePlayer.PlaylistPosition).Title
                             .Substring(0, length) + "...' ";
-                        _playlistIndexObj.GetComponent<Text>().text = _basePlayer.PlaylistPosition + 1 + "/" + _basePlayer.CurrentPlaylist.Count;
+                        if (_playlistIndexText) _playlistIndexText.text = _basePlayer.PlaylistPosition + 1 + "/" + _basePlayer.CurrentPlaylist.Count;
                         PlaylistTrackText.text = _basePlayer.PlaylistString;
                     }
                     else
@@ -142,29 +144,104 @@ namespace OdinOnDemand.Utils.UI
                         _basePlayer.PlaylistString = _basePlayer.PlaylistString = _basePlayer.CurrentPlaylist.ElementAt(_basePlayer.PlaylistPosition).Title;
                         _basePlayer.PlaylistString = "Playing '" + _basePlayer.CurrentPlaylist.ElementAt(_basePlayer.PlaylistPosition).Title
                             .Substring(0, length) + "...' ";
-                        _playlistIndexObj.GetComponent<Text>().text = _basePlayer.PlaylistPosition + 1 + "/" + _basePlayer.CurrentPlaylist.Count + ", (shuffled)";
+                        if (_playlistIndexText) _playlistIndexText.text = _basePlayer.PlaylistPosition + 1 + "/" + _basePlayer.CurrentPlaylist.Count + ", (shuffled)";
                         PlaylistTrackText.text = _basePlayer.PlaylistString;
                     }
                 }
         }
 
+        /// <summary>
+        ///     Fills the URL panel's two text rows: the playlist track and index while a playlist
+        ///     plays, otherwise the playing media's title and elapsed/total time.
+        /// </summary>
+        internal void UpdateMediaInfo()
+        {
+            if (!URLPanelObj) return;
+            UpdatePlaylistUI();
+            if (_basePlayer.PlayerSettings.IsPlayingPlaylist)
+            {
+                if (PlaylistTrackText) PlaylistTrackText.text = _basePlayer.PlaylistString;
+                return;
+            }
+
+            var title = MediaInfoTitle();
+            if (title == null) return;
+            if (PlaylistTrackText) PlaylistTrackText.text = title;
+            if (_playlistIndexText) _playlistIndexText.text = MediaInfoTime();
+        }
+
         public void UpdatePlaylistUI()
         {
-            if(_playlistStringObj)  _playlistStringObj.SetActive(_basePlayer.PlayerSettings.IsPlayingPlaylist);
-            if(_skipPlaylistTrackObj) _skipPlaylistTrackObj.SetActive(_basePlayer.PlayerSettings.IsPlayingPlaylist);
-            if(_previousPlaylistTrackObj) _previousPlaylistTrackObj.SetActive(_basePlayer.PlayerSettings.IsPlayingPlaylist);
-            if(ToggleShuffleObj) ToggleShuffleObj.SetActive(_basePlayer.PlayerSettings.IsPlayingPlaylist);
-            if(ToggleShuffleTextObj) ToggleShuffleTextObj.SetActive(_basePlayer.PlayerSettings.IsPlayingPlaylist);
-            if(_playlistIndexObj)  _playlistIndexObj.SetActive(_basePlayer.PlayerSettings.IsPlayingPlaylist);
+            var playlist = _basePlayer.PlayerSettings.IsPlayingPlaylist;
+            // The two text rows are shared with the media info readout; the track controls are not.
+            var textRows = playlist || MediaInfoTitle() != null;
+            if(_playlistStringObj)  _playlistStringObj.SetActive(textRows);
+            if(_playlistIndexObj)  _playlistIndexObj.SetActive(textRows);
+            if(_skipPlaylistTrackObj) _skipPlaylistTrackObj.SetActive(playlist);
+            if(_previousPlaylistTrackObj) _previousPlaylistTrackObj.SetActive(playlist);
+            if(ToggleShuffleObj) ToggleShuffleObj.SetActive(playlist);
+            if(ToggleShuffleTextObj) ToggleShuffleTextObj.SetActive(playlist);
         }
+
+        /// <summary>Title of the playing media, trimmed to the panel width, or null when idle.</summary>
+        private string MediaInfoTitle()
+        {
+            var settings = _basePlayer.PlayerSettings;
+            if (!settings.IsPlaying && !settings.IsPaused) return null;
+
+            var title = settings.MediaTitle;
+            if (string.IsNullOrEmpty(title)) title = TitleFromUrl(_basePlayer.UnparsedURL);
+            if (string.IsNullOrEmpty(title)) return null;
+
+            title = title.Trim();
+            return title.Length <= MediaTitleLimit ? title : title.Substring(0, MediaTitleLimit - 3).TrimEnd() + "...";
+        }
+
+        private string MediaInfoTime()
+        {
+            var elapsed = Clock(_basePlayer.PlaybackTime);
+            var duration = _basePlayer.PlaybackDuration;
+            // Live streams have no shared end point, so only the elapsed local time is meaningful.
+            return duration > 0d ? elapsed + " / " + Clock(duration) : "LIVE " + elapsed;
+        }
+
+        private static string Clock(double seconds)
+        {
+            if (double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds < 0d) seconds = 0d;
+            var span = TimeSpan.FromSeconds(seconds);
+            return span.TotalHours >= 1d
+                ? string.Format(CultureInfo.InvariantCulture, "{0}:{1:00}:{2:00}", (int)span.TotalHours, span.Minutes,
+                    span.Seconds)
+                : string.Format(CultureInfo.InvariantCulture, "{0}:{1:00}", span.Minutes, span.Seconds);
+        }
+
+        /// <summary>Last URL segment without its extension; falls back to the host.</summary>
+        private static string TitleFromUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return null;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return url;
+
+            var path = uri.AbsolutePath.TrimEnd('/');
+            var slash = path.LastIndexOf('/');
+            var name = slash >= 0 ? path.Substring(slash + 1) : path;
+            var dot = name.LastIndexOf('.');
+            if (dot > 0) name = name.Substring(0, dot);
+            return name.Length == 0 ? uri.Host : Uri.UnescapeDataString(name);
+        }
+
+        /// <summary>Characters that fit the 300px title row at font size 18.</summary>
+        private const int MediaTitleLimit = 30;
+
+        /// <summary>Seconds an error stays on the player's indicator before it is cleared.</summary>
+        internal const float ErrorMessageSeconds = 8f;
 
         internal IEnumerator UnavailableIndicator(string message)
         {
             if (LoadingIndicatorObj)
             {
                 LoadingIndicatorObj.GetComponent<Text>().text = message;
-                LoadingIndicatorObj.SetActive(true);
-                yield return new WaitForSeconds(2);
+                _basePlayer.HoldLoadingIndicator();
+                yield return new WaitForSeconds(ErrorMessageSeconds);
                 LoadingIndicatorObj.SetActive(false);
             }
         }
@@ -282,7 +359,7 @@ namespace OdinOnDemand.Utils.UI
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0f, 0f),
                 375f,
-                155f,
+                165f,
                 true);
             URLPanelObj.SetActive(false);
             var closeButton = GUIManager.Instance.CreateButton(
@@ -433,7 +510,7 @@ namespace OdinOnDemand.Utils.UI
                 URLPanelObj.transform,
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f),
-                new Vector2(-5f, -35f),
+                new Vector2(-5f, -45f),
                 GUIManager.Instance.AveriaSerifBold,
                 18,
                 GUIManager.Instance.ValheimOrange,
@@ -450,7 +527,7 @@ namespace OdinOnDemand.Utils.UI
                 URLPanelObj.transform,
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f),
-                new Vector2(-5f, -62f),
+                new Vector2(-5f, -72f),
                 GUIManager.Instance.AveriaSerifBold,
                 18,
                 GUIManager.Instance.ValheimOrange,
@@ -459,10 +536,11 @@ namespace OdinOnDemand.Utils.UI
                 300f,
                 40f,
                 false);
-            playlistStringText.SetActive(false);
+            playlistIndexText.SetActive(false);
             _playlistIndexObj = playlistIndexText;
 
             PlaylistTrackText = _playlistStringObj.GetComponent<Text>();
+            _playlistIndexText = _playlistIndexObj.GetComponent<Text>();
 
             _skipPlaylistTrackObj = CreateUISpriteButton("next", URLPanelObj.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 new Vector2(44f, 10f), 34f, 34f,  OnClickSkipPlaylistTrack);
@@ -589,6 +667,7 @@ namespace OdinOnDemand.Utils.UI
                 if (_nightlyYtDlpToggle) _nightlyYtDlpToggle.SetIsOnWithoutNotify(OODConfig.UseNightlyYtDlp.Value);
                 if (_maxHeightLabel) _maxHeightLabel.text = MaxHeightLabelText();
                 UpdateExternalJsStatus();
+                UpdateStreamlinkStatus();
             }
             UpdateSpeakerCount();
             _settingsPanelObj.SetActive(_basePlayer.PlayerSettings.IsSettingsGuiActive);
@@ -811,6 +890,9 @@ namespace OdinOnDemand.Utils.UI
                 Application.OpenURL(ExternalJsRuntime.SetupGuideUrl);
             });
             UpdateExternalJsStatus();
+            var streamlinkRow = CreateSettingsRow(contentTransform, 34f);
+            _streamlinkStatusText = CreateRowLabel(streamlinkRow, "", 330f);
+            UpdateStreamlinkStatus();
         }
 
         /// <summary>Full-width settings row with a fixed height the layout group honours.</summary>
@@ -973,6 +1055,18 @@ namespace OdinOnDemand.Utils.UI
                 : "External JS: not detected, formats limited";
             _externalJsStatusText.color = GUIManager.Instance.ValheimOrange;
             if (_externalJsGuideButtonObj) _externalJsGuideButtonObj.SetActive(true);
+        }
+
+        private void UpdateStreamlinkStatus()
+        {
+            if (!_streamlinkStatusText) return;
+            StreamlinkRuntime.Refresh();
+            _streamlinkStatusText.text = StreamlinkRuntime.Detected
+                ? "Twitch/Kick: Streamlink detected"
+                : "Twitch/Kick: install Streamlink on PATH";
+            _streamlinkStatusText.color = StreamlinkRuntime.Detected
+                ? new Color(0.4f, 0.85f, 0.4f)
+                : GUIManager.Instance.ValheimOrange;
         }
 
         private void ToggleLock()

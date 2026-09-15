@@ -25,6 +25,7 @@ namespace OdinOnDemand.Utils.Config
         public static ConfigEntry<bool> IsYtEnabled { get; private set; } 
         public static ConfigEntry<bool> UseNightlyYtDlp { get; private set; }
         public static ConfigEntry<int> MaxVideoHeight { get; private set; }
+        public static ConfigEntry<bool> DecoderAudioStats { get; private set; }
         public static ConfigEntry<bool> AutoUpdateRecipes { get; private set; }
         public static ConfigEntry<bool> DebugEnabled { get; private set; }
         public static ConfigEntry<bool> VideoBacklight { get; private set; } 
@@ -83,10 +84,16 @@ namespace OdinOnDemand.Utils.Config
 
             MaxVideoHeight = config.Bind("YouTube", "Max Video Height", 1080,
                 new ConfigDescription(
-                    "Tallest YouTube video stream to request. Decoding is done in software and every " +
+                    "Tallest YouTube or Twitch video stream to request. Decoding is done in software and every " +
                     "frame is uploaded from the CPU, so 1440p and 2160p cost several times more than " +
                     "1080p and can stall the game. Client-side; applies on the next load or reload.",
                     new AcceptableValueList<int>(360, 480, 720, 1080, 1440, 2160)));
+
+            DecoderAudioStats = config.Bind("YouTube", "Decoder Audio Stats", false,
+                new ConfigDescription(
+                    "Log cumulative VLC-to-Unity audio counters every five seconds and on end/stop. " +
+                    "Client-side, default off; configure before launching. Counters restart when enabled. " +
+                    "Logs contain no stream URLs and do not require Debug Logging."));
 
             MasterVolumeScreen = config.Bind("Mixer Volumes", "Screen Master Volume", 1f,
                 new ConfigDescription("Master volume of all Screens. Clientside setting.",

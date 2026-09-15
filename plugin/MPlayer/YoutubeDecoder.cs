@@ -1,17 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using LibVLCSharp.Shared;
+using OdinOnDemand.Utils.Config;
 using UnityEngine;
+using Logger = Jotunn.Logger;
 
 namespace OdinOnDemand.MPlayer
 {
     /// <summary>
-    /// Decodes YouTube's selected video and audio streams through one LibVLC clock.
+    /// Decodes network video and audio streams through one LibVLC clock.
     /// Native callbacks only touch managed/native buffers; Unity objects are updated by Update.
     /// </summary>
     public sealed class YoutubeDecoder : MonoBehaviour
@@ -21,6 +24,7 @@ namespace OdinOnDemand.MPlayer
         private const int AudioBufferSeconds = 4;
         private const float PrepareTimeoutSeconds = 120f;
         private const double AuthoritativeClockTimeoutSeconds = 1.5d;
+        private const float AudioStatsIntervalSeconds = 5f;
 
         private static readonly object CoreLock = new object();
         private static bool coreInitialized;
@@ -83,7 +87,7 @@ namespace OdinOnDemand.MPlayer
             set
             {
                 PlaybackSession current = session;
-                if (current == null || !isPrepared)
+                if (current == null || !isPrepared || !current.Seekable)
                 {
                     return;
                 }
@@ -108,6 +112,10 @@ namespace OdinOnDemand.MPlayer
 
         private void SeekCurrent(PlaybackSession current, double seconds)
         {
+            if (!current.Seekable)
+                return;
+            if (current.Audio.DiagnosticsEnabled)
+                current.DiagnosticSeeks++;
             bool resume = requestedPlay && current.NativePlaying && !current.IsBuffering;
             current.Audio.SetActive(resume);
             StopUnityAudio();
@@ -124,7 +132,7 @@ namespace OdinOnDemand.MPlayer
             get
             {
                 PlaybackSession current = session;
-                if (current == null)
+                if (current == null || current.IsLive)
                 {
                     return 0d;
                 }
@@ -140,11 +148,27 @@ namespace OdinOnDemand.MPlayer
         }
 
         /// <summary>
-        /// Begins opening the streams. LibVLC must briefly play to initialize its decoders;
-        /// Prepared is raised only after LibVLC subsequently confirms the paused state.
+        ///     True once LibVLC has negotiated a video format, which only happens for media that
+        ///     carries video. Audio-only sources - internet radio, audio_only live streams - stay
+        ///     false, so the player can show its radio panel and waveform instead of a blank
+        ///     screen. Deliberately a cached flag: libvlc_video_get_track_count takes the input
+        ///     thread's lock and can stall the caller while a live input is still starting.
+        /// </summary>
+        public bool HasVideoTrack
+        {
+            get
+            {
+                PlaybackSession current = session;
+                return current != null && current.VideoFormatSeen;
+            }
+        }
+
+        /// <summary>
+        /// Begins opening the streams. Seekable, pausable media prepares by playing then pausing.
+        /// Live media instead keeps decoding with Unity output gated until Play.
         /// </summary>
         public void Prepare(string videoUrl, string audioUrl, AudioSource output, RenderTexture renderTarget,
-            IDictionary<string, string> headers = null)
+            IDictionary<string, string> headers = null, bool useChunkedInput = true, bool isLive = false)
         {
             if (destroyed)
             {
@@ -157,11 +181,11 @@ namespace OdinOnDemand.MPlayer
                 (!string.IsNullOrEmpty(audioUrl) && !TryGetNetworkUri(audioUrl, out audioUri)))
             {
                 StopInternal(true);
-                RaiseError("YouTube decoder received an invalid stream or audio output.");
+                RaiseError("VLC decoder received an invalid stream or audio output.");
                 return;
             }
 
-            pendingPrepare = new PrepareRequest(videoUri, audioUri, output, renderTarget, headers);
+            pendingPrepare = new PrepareRequest(videoUri, audioUri, output, renderTarget, headers, useChunkedInput, isLive);
             pendingSeekSeconds = null;
             requestedPlay = false;
             isPrepared = false;
@@ -197,11 +221,13 @@ namespace OdinOnDemand.MPlayer
                 return;
             if (current.HasEnded)
             {
-                pendingSeekSeconds = pendingSeekSeconds ?? 0d;
+                if (current.Seekable)
+                    pendingSeekSeconds = pendingSeekSeconds ?? 0d;
                 BeginReplay(current);
                 return;
             }
             current.Audio.SetActive(true);
+            current.VideoOutputEnabled = true;
 
             if (isPaused && current.Player.State == VLCState.Paused)
             {
@@ -211,7 +237,8 @@ namespace OdinOnDemand.MPlayer
             {
                 if (!current.Player.Play())
                 {
-                    FailCurrent(current, "LibVLC could not start the YouTube stream.");
+                    FailCurrent(current, "LibVLC could not start the media stream.");
+                    return;
                 }
             }
             else if (!current.IsBuffering)
@@ -244,9 +271,15 @@ namespace OdinOnDemand.MPlayer
             isPaused = true;
             FreezePlaybackClock();
             current.Audio.SetActive(false);
+            current.VideoOutputEnabled = false;
             StopUnityAudio();
             if (!transitionInProgress)
-                current.Player.SetPause(true);
+            {
+                current.OutputGatedPause = current.OutputGatedPause ||
+                    !current.Seekable || !current.Player.CanPause;
+                if (!current.OutputGatedPause)
+                    current.Player.SetPause(true);
+            }
         }
 
         /// <summary>
@@ -271,6 +304,8 @@ namespace OdinOnDemand.MPlayer
             }
 
             PlaybackSession current = session;
+            if (current != null)
+                UpdateAudioDiagnostics(current);
             if (current == null || transitionInProgress)
             {
                 return;
@@ -278,7 +313,7 @@ namespace OdinOnDemand.MPlayer
 
             if (!isPrepared && UnityEngine.Time.realtimeSinceStartup - prepareStartedAt > PrepareTimeoutSeconds)
             {
-                FailCurrent(current, "LibVLC timed out while preparing the YouTube stream.");
+                FailCurrent(current, "LibVLC timed out while preparing the media stream.");
                 return;
             }
 
@@ -290,7 +325,8 @@ namespace OdinOnDemand.MPlayer
             }
 
 
-            if (playbackClockRunning &&
+            // Live inputs may not expose a native timeline; buffering/end still stop this clock.
+            if (playbackClockRunning && !current.OutputGatedPause &&
                 (System.Diagnostics.Stopwatch.GetTimestamp() - lastAuthoritativeClockTick) /
                 (double)System.Diagnostics.Stopwatch.Frequency > AuthoritativeClockTimeoutSeconds)
             {
@@ -300,8 +336,72 @@ namespace OdinOnDemand.MPlayer
             UploadLatestFrame(current);
         }
 
+        private void UpdateAudioDiagnostics(PlaybackSession current)
+        {
+            bool enabled = OODConfig.DecoderAudioStats.Value;
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            if (enabled != current.Audio.DiagnosticsEnabled)
+            {
+                current.Audio.SetDiagnosticsEnabled(enabled);
+                current.DiagnosticStartedAt = now;
+                current.NextDiagnosticLogAt = now + AudioStatsIntervalSeconds;
+                current.DiagnosticSeeks = 0;
+                if (enabled)
+                {
+                    int length, count;
+                    AudioSettings.GetDSPBufferSize(out length, out count);
+                    Logger.LogInfo(string.Format(CultureInfo.InvariantCulture,
+                        "[VLC audio #{0}] enabled; cumulative frame counters, PCM={1}Hz/{2}ch, " +
+                        "Unity={3}Hz DSP={4}x{5}; submitted means handed to Unity, not audible output.",
+                        current.DiagnosticId, AudioSampleRate, AudioChannels,
+                        AudioSettings.outputSampleRate, length, count));
+                }
+            }
+
+            if (enabled && now >= current.NextDiagnosticLogAt)
+            {
+                LogAudioDiagnostics(current, "interval");
+                current.NextDiagnosticLogAt = now + AudioStatsIntervalSeconds;
+            }
+        }
+
+        private void LogAudioDiagnostics(PlaybackSession current, string reason)
+        {
+            if (!OODConfig.DecoderAudioStats.Value || !current.Audio.DiagnosticsEnabled)
+                return;
+
+            PcmRingBuffer.Diagnostics stats = current.Audio.GetDiagnostics();
+            AudioSource output = current.Audio.Output;
+            Logger.LogInfo(string.Format(CultureInfo.InvariantCulture,
+                "[VLC audio #{0}] {1} elapsed={2:F1}s preparing={3} nativePlaying={4} buffering={5} " +
+                "active={6} sourcePlaying={7} virtual={8} pitch={9:F3} volume={10:F3} " +
+                "queueMs={11:F1} prefetchMs={12:F1} callbacksVlc/Unity={13}/{14} " +
+                "framesReceived/Written/Submitted/Requested={15}/{16}/{17}/{18} " +
+                "underruns={19} underrunFrames={20} scheduledSilenceFrames={21} " +
+                "inactiveWrite/ReadFrames={22}/{23} late/expired/clearedFrames={24}/{25}/{26} " +
+                "ptsResets={27} maxPtsSkewMs={28:F3} readerResets={29} " +
+                "activeCalls/redundant={30}/{31} flushes={32} positionCallbacks={33} fullWaits={34} " +
+                "maxVlc/UnityGapMs={35:F1}/{36:F1} seeks={37}",
+                current.DiagnosticId, reason, UnityEngine.Time.realtimeSinceStartup - current.DiagnosticStartedAt,
+                current.Preparing, current.NativePlaying, current.IsBuffering,
+                stats.Active, output != null && output.isPlaying, output != null && output.isVirtual,
+                output != null ? output.pitch : 0f, output != null ? output.volume : 0f,
+                stats.QueuedFrames * 1000d / AudioSampleRate, stats.PrefetchFrames * 1000d / AudioSampleRate,
+                stats.WriteCallbacks, stats.ReadCallbacks,
+                stats.ReceivedFrames, stats.WrittenFrames, stats.SubmittedFrames, stats.RequestedFrames,
+                stats.Underruns, stats.UnderrunFrames, stats.ScheduledSilenceFrames,
+                stats.InactiveWriteFrames, stats.InactiveReadFrames,
+                stats.LateFrames, stats.ExpiredFrames, stats.ClearedFrames,
+                stats.PtsResets, stats.MaxPtsSkewMicroseconds / 1000d, stats.ReaderResets,
+                stats.ActiveCalls, stats.RedundantActiveCalls, stats.Flushes, stats.PositionCallbacks, stats.FullWaits,
+                stats.MaxWriteGapMicroseconds / 1000d, stats.MaxReadGapMicroseconds / 1000d,
+                current.DiagnosticSeeks));
+        }
+
         private void OnDestroy()
         {
+            if (session != null)
+                LogAudioDiagnostics(session, "destroy");
             destroyed = true;
             pendingPrepare = null;
             requestedPlay = false;
@@ -329,6 +429,7 @@ namespace OdinOnDemand.MPlayer
 
             ReleaseLibVlc(finalShutdown);
         }
+
 
         private void StartPendingPrepare()
         {
@@ -378,13 +479,21 @@ namespace OdinOnDemand.MPlayer
                             }
                         });
                     });
-                createdSession = new PlaybackSession(this, player, audio, request.TargetTexture != null);
+                createdSession = new PlaybackSession(this, player, audio, request.TargetTexture != null, request.IsLive);
+                createdSession.VideoOutputEnabled = request.UseChunkedInput;
                 createdSession.ConfigureCallbacks();
 
-                // YouTube throttles an open-ended stream to about its own bitrate, which starves
-                // the decoder; bounded range requests keep the buffer ahead of playback.
-                videoInput = new ChunkedHttpMediaInput(request.VideoUri.AbsoluteUri, request.Headers);
-                media = new Media(libVlc, videoInput);
+                if (request.UseChunkedInput)
+                {
+                    // YouTube throttles open-ended streams; bounded requests keep decoding ahead.
+                    videoInput = new ChunkedHttpMediaInput(request.VideoUri.AbsoluteUri, request.Headers);
+                    media = new Media(libVlc, videoInput, ":demux=avformat");
+                }
+                else
+                {
+                    // Native access handles live HTTP, playlists and adaptive HLS segments.
+                    media = new Media(libVlc, request.VideoUri);
+                }
                 if (request.AudioUri != null &&
                     !media.AddSlave(MediaSlaveType.Audio, 4, request.AudioUri))
                 {
@@ -409,7 +518,8 @@ namespace OdinOnDemand.MPlayer
                 SetPlaybackClock(0d, false);
                 prepareStartedAt = UnityEngine.Time.realtimeSinceStartup;
                 createdSession.AttachEvents();
-                audio.SetActive(true);
+                UpdateAudioDiagnostics(createdSession);
+                audio.SetActive(request.UseChunkedInput);
 
                 if (!player.Play())
                 {
@@ -446,7 +556,7 @@ namespace OdinOnDemand.MPlayer
                 isPaused = false;
                 ResetUnityAudio(true);
                 targetTexture = null;
-                RaiseError("YouTube decoder could not initialize LibVLC playback.");
+                RaiseError("VLC decoder could not initialize playback.");
             }
         }
 
@@ -486,8 +596,10 @@ namespace OdinOnDemand.MPlayer
                 {
                     // Debug logging is deliberately disabled: native messages can include signed
                     // stream URLs.
+                    // Speex preserves fractional frames; the default fallback truncates each block.
                     sharedLibVlc = new LibVLC(
-                        "--no-video-title-show", "--no-sub-autodetect-file", "--demux=avformat");
+                        "--no-video-title-show", "--no-sub-autodetect-file",
+                        "--audio-resampler=speex");
                 }
 
                 sharedLibVlcUsers++;
@@ -536,7 +648,7 @@ namespace OdinOnDemand.MPlayer
 
             output.Stop();
             AudioClip clip = AudioClip.Create(
-                "OdinOnDemand YouTube PCM",
+                "OdinOnDemand VLC PCM",
                 (int)AudioSampleRate * AudioBufferSeconds,
                 (int)AudioChannels,
                 (int)AudioSampleRate,
@@ -602,6 +714,8 @@ namespace OdinOnDemand.MPlayer
 
         private void UploadLatestFrame(PlaybackSession current)
         {
+            if (!current.VideoOutputEnabled)
+                return;
             VideoFrameBuffer frameBuffer;
             int slot;
             byte[] pixels;
@@ -643,7 +757,7 @@ namespace OdinOnDemand.MPlayer
             }
             catch
             {
-                FailCurrent(current, "Unity could not upload a decoded YouTube video frame.");
+                FailCurrent(current, "Unity could not upload a decoded video frame.");
             }
             finally
             {
@@ -662,13 +776,25 @@ namespace OdinOnDemand.MPlayer
 
         private void HandlePlaying(PlaybackSession source)
         {
-            if (!ReferenceEquals(session, source) || transitionInProgress)
+            if (!ReferenceEquals(session, source) || transitionInProgress ||
+                !source.NativePlaying || source.HasEnded)
             {
                 return;
             }
 
+            // Adaptive live inputs can advertise seek/pause despite having no finite timeline.
+            // Their client-local clock is not a position that RPC synchronization may seek to.
+            source.Seekable = !source.IsLive && source.Player.IsSeekable &&
+                (source.Input != null || source.Player.Length > 0);
             if (source.Preparing)
             {
+                source.OutputGatedPause = !source.Seekable || !source.Player.CanPause;
+                if (source.OutputGatedPause)
+                {
+                    source.VideoOutputEnabled = false;
+                    CompletePrepare(source);
+                    return;
+                }
                 if (!source.PreparePauseRequested)
                 {
                     source.PreparePauseRequested = true;
@@ -696,20 +822,16 @@ namespace OdinOnDemand.MPlayer
                 return;
             }
 
-            long nativeTime = source.Player.Time;
+            if (source.OutputGatedPause && requestedPlay)
+            {
+                // A late native pause must not strand an output-gated resume.
+                source.Player.SetPause(false);
+                return;
+            }
             if (source.Preparing && source.PreparePauseRequested)
             {
-                source.Preparing = false;
-                source.Audio.SetActive(false);
-                SetAuthoritativePlaybackClock(
-                    nativeTime >= 0 ? nativeTime / 1000d : playbackClockSeconds,
-                    false);
-                StopUnityAudio();
-                requestedPlay = false;
-                isPrepared = true;
-                isPlaying = false;
-                isPaused = true;
-                InvokePrepared();
+                source.VideoOutputEnabled = true;
+                CompletePrepare(source);
                 return;
             }
 
@@ -718,6 +840,22 @@ namespace OdinOnDemand.MPlayer
                 isPlaying = false;
                 isPaused = true;
             }
+        }
+
+        private void CompletePrepare(PlaybackSession source)
+        {
+            long nativeTime = source.Player.Time;
+            source.Preparing = false;
+            source.Audio.SetActive(false);
+            SetAuthoritativePlaybackClock(
+                nativeTime >= 0 ? nativeTime / 1000d : playbackClockSeconds,
+                false);
+            StopUnityAudio();
+            requestedPlay = false;
+            isPrepared = true;
+            isPlaying = false;
+            isPaused = true;
+            InvokePrepared();
         }
 
         private void HandleNativeTime(PlaybackSession source, long milliseconds)
@@ -785,6 +923,11 @@ namespace OdinOnDemand.MPlayer
             {
                 return;
             }
+            if (source.Preparing)
+            {
+                FailCurrent(source, "The stream ended before LibVLC could prepare playback.");
+                return;
+            }
 
             requestedPlay = false;
             isPlaying = false;
@@ -797,6 +940,9 @@ namespace OdinOnDemand.MPlayer
                 SetAuthoritativePlaybackClock(duration, false);
             }
             source.Audio.SetActive(false);
+            if (source.OutputGatedPause)
+                source.VideoOutputEnabled = false;
+            LogAudioDiagnostics(source, "end");
             StopUnityAudio();
 
             InvokeEnded();
@@ -902,6 +1048,7 @@ namespace OdinOnDemand.MPlayer
 
         private void BeginReplay(PlaybackSession source)
         {
+            source.VideoOutputEnabled = false;
             // VLC 3 keeps an ended input until Stop joins it. Serialize this with disposal
             // so a source change or destruction cannot release the player during that join.
             transitionInProgress = true;
@@ -940,6 +1087,9 @@ namespace OdinOnDemand.MPlayer
 
         private void BeginShutdown(PlaybackSession oldSession)
         {
+            oldSession.Audio.SetActive(false);
+            oldSession.VideoOutputEnabled = false;
+            LogAudioDiagnostics(oldSession, "shutdown");
             transitionInProgress = true;
             shutdownTask = shutdownTask.ContinueWith(
                 ignored => oldSession.Shutdown(),
@@ -984,7 +1134,7 @@ namespace OdinOnDemand.MPlayer
             }
             catch (Exception exception)
             {
-                Debug.LogError("[OdinOnDemand] YouTube decoder Error subscriber failed: " +
+                Debug.LogError("[OdinOnDemand] VLC decoder Error subscriber failed: " +
                                exception.GetType().Name);
             }
         }
@@ -1003,7 +1153,7 @@ namespace OdinOnDemand.MPlayer
             }
             catch (Exception exception)
             {
-                Debug.LogError("[OdinOnDemand] YouTube decoder Prepared subscriber failed: " +
+                Debug.LogError("[OdinOnDemand] VLC decoder Prepared subscriber failed: " +
                                exception.GetType().Name);
             }
         }
@@ -1022,7 +1172,7 @@ namespace OdinOnDemand.MPlayer
             }
             catch (Exception exception)
             {
-                Debug.LogError("[OdinOnDemand] YouTube decoder Ended subscriber failed: " +
+                Debug.LogError("[OdinOnDemand] VLC decoder Ended subscriber failed: " +
                                exception.GetType().Name);
             }
         }
@@ -1036,13 +1186,15 @@ namespace OdinOnDemand.MPlayer
         private sealed class PrepareRequest
         {
             public PrepareRequest(Uri videoUri, Uri audioUri, AudioSource output,
-                RenderTexture targetTexture, IDictionary<string, string> headers)
+                RenderTexture targetTexture, IDictionary<string, string> headers, bool useChunkedInput, bool isLive)
             {
                 VideoUri = videoUri;
                 AudioUri = audioUri;
                 Output = output;
                 TargetTexture = targetTexture;
                 Headers = headers;
+                UseChunkedInput = useChunkedInput;
+                IsLive = isLive;
             }
 
             public Uri VideoUri { get; private set; }
@@ -1050,10 +1202,13 @@ namespace OdinOnDemand.MPlayer
             public AudioSource Output { get; private set; }
             public RenderTexture TargetTexture { get; private set; }
             public IDictionary<string, string> Headers { get; private set; }
+            public bool UseChunkedInput { get; private set; }
+            public bool IsLive { get; private set; }
         }
 
         private sealed class PlaybackSession
         {
+            private static int nextDiagnosticId;
             private readonly YoutubeDecoder owner;
             private readonly object videoGate = new object();
             private readonly bool renderVideo;
@@ -1072,10 +1227,13 @@ namespace OdinOnDemand.MPlayer
                 YoutubeDecoder owner,
                 MediaPlayer player,
                 PcmRingBuffer audio,
-                bool renderVideo)
+                bool renderVideo,
+                bool isLive)
             {
                 this.owner = owner;
                 this.renderVideo = renderVideo;
+                IsLive = isLive;
+                OutputGatedPause = isLive;
                 Player = player;
                 Audio = audio;
                 Preparing = true;
@@ -1092,8 +1250,19 @@ namespace OdinOnDemand.MPlayer
             public PcmRingBuffer Audio { get; private set; }
             public bool Preparing { get; set; }
             public bool PreparePauseRequested { get; set; }
+            public bool IsLive { get; private set; }
+            public bool Seekable { get; set; }
+            public bool OutputGatedPause { get; set; }
+            public volatile bool VideoOutputEnabled;
+
+            /// <summary>Set once LibVLC negotiates a video format, proving a video track exists.</summary>
+            public volatile bool VideoFormatSeen;
             public volatile bool NativePlaying;
             public volatile bool IsBuffering;
+            public readonly int DiagnosticId = Interlocked.Increment(ref nextDiagnosticId);
+            public float DiagnosticStartedAt;
+            public float NextDiagnosticLogAt;
+            public int DiagnosticSeeks;
 
             public void ConfigureCallbacks()
             {
@@ -1172,6 +1341,7 @@ namespace OdinOnDemand.MPlayer
             public void Shutdown()
             {
                 Audio.SetActive(false);
+                VideoOutputEnabled = false;
                 try
                 {
                     if (eventsAttached)
@@ -1271,7 +1441,7 @@ namespace OdinOnDemand.MPlayer
                 NativePlaying = false;
                 owner.EnqueueMainThread(delegate
                 {
-                    owner.FailCurrent(this, "LibVLC encountered an error while decoding the YouTube stream.");
+                    owner.FailCurrent(this, "LibVLC encountered an error while decoding the media stream.");
                 });
             }
 
@@ -1356,6 +1526,7 @@ namespace OdinOnDemand.MPlayer
                             previous.DisposeNative();
                         }
                     }
+                    VideoFormatSeen = true;
                     return 1;
                 }
                 catch
@@ -1397,7 +1568,7 @@ namespace OdinOnDemand.MPlayer
 
             private void VideoDisplay(IntPtr opaque, IntPtr picture)
             {
-                if (!renderVideo)
+                if (!renderVideo || !VideoOutputEnabled)
                 {
                     return;
                 }
@@ -1439,7 +1610,7 @@ namespace OdinOnDemand.MPlayer
                 {
                     owner.EnqueueMainThread(delegate
                     {
-                        owner.FailCurrent(this, "LibVLC could not buffer decoded YouTube audio.");
+                        owner.FailCurrent(this, "LibVLC could not buffer decoded audio.");
                     });
                 }
             }
@@ -1449,7 +1620,7 @@ namespace OdinOnDemand.MPlayer
                 {
                     owner.EnqueueMainThread(delegate
                     {
-                        owner.FailCurrent(this, "LibVLC could not allocate a supported YouTube video frame.");
+                        owner.FailCurrent(this, "LibVLC could not allocate a supported video frame.");
                     });
                 }
             }
@@ -1593,6 +1764,7 @@ namespace OdinOnDemand.MPlayer
         {
             private const double MicrosecondsPerSecond = 1000000d;
             private const double TimestampToleranceFrames = 2d;
+            private const double PacketDiscontinuityMicroseconds = 50000d;
             private const double ReaderLateResetMicroseconds = 250000d;
             private const double ReaderAheadResetMicroseconds = 2000000d;
 
@@ -1608,12 +1780,56 @@ namespace OdinOnDemand.MPlayer
             private int readFrame;
             private int writeFrame;
             private int countFrames;
-            private double firstSamplePts;
+            private double firstSamplePts = double.NaN;
             private double readerNextPts = double.NaN;
             private int clipReadPosition;
             private bool active;
             private int clockFailureRaised;
             private int presentationGeneration;
+            private volatile bool diagnosticsEnabled;
+            private Diagnostics diagnostics;
+            private long lastDiagnosticWriteAt;
+            private long lastDiagnosticReadAt;
+
+            public struct Diagnostics
+            {
+                public bool Active;
+                public int QueuedFrames, PrefetchFrames;
+                public long WriteCallbacks, ReadCallbacks;
+                public long ReceivedFrames, WrittenFrames, SubmittedFrames, RequestedFrames;
+                public long InactiveWriteFrames, InactiveReadFrames;
+                public long Underruns, UnderrunFrames, ScheduledSilenceFrames;
+                public long LateFrames, ExpiredFrames, ClearedFrames;
+                public long PtsResets, ReaderResets, ActiveCalls, RedundantActiveCalls;
+                public long Flushes, PositionCallbacks, FullWaits;
+                public double MaxPtsSkewMicroseconds;
+                public long MaxWriteGapMicroseconds, MaxReadGapMicroseconds;
+            }
+
+            public bool DiagnosticsEnabled { get { return diagnosticsEnabled; } }
+            public AudioSource Output { get { return output; } }
+
+            public void SetDiagnosticsEnabled(bool enabled)
+            {
+                lock (gate)
+                {
+                    diagnostics = default(Diagnostics);
+                    lastDiagnosticWriteAt = 0;
+                    lastDiagnosticReadAt = 0;
+                    diagnosticsEnabled = enabled;
+                }
+            }
+
+            public Diagnostics GetDiagnostics()
+            {
+                lock (gate)
+                {
+                    Diagnostics result = diagnostics;
+                    result.Active = active;
+                    result.QueuedFrames = countFrames;
+                    return result;
+                }
+            }
 
             public PcmRingBuffer(
                 int sampleRate,
@@ -1636,6 +1852,14 @@ namespace OdinOnDemand.MPlayer
             {
                 lock (gate)
                 {
+                    if (diagnosticsEnabled)
+                    {
+                        diagnostics.ActiveCalls++;
+                        if (active == value)
+                            diagnostics.RedundantActiveCalls++;
+                        else
+                            lastDiagnosticWriteAt = lastDiagnosticReadAt = 0;
+                    }
                     active = value;
                     ClearLocked();
                     Monitor.PulseAll(gate);
@@ -1646,6 +1870,8 @@ namespace OdinOnDemand.MPlayer
             {
                 lock (gate)
                 {
+                    if (diagnosticsEnabled)
+                        diagnostics.Flushes++;
                     ClearLocked();
                     Monitor.PulseAll(gate);
                 }
@@ -1655,8 +1881,11 @@ namespace OdinOnDemand.MPlayer
             {
                 lock (gate)
                 {
+                    if (diagnosticsEnabled)
+                        diagnostics.PositionCallbacks++;
+                    // This is the looping carrier clip's cursor, not a seek in the media.
+                    // Flush/SetActive own presentation resets; a clip wrap must stay sample-contiguous.
                     clipReadPosition = Math.Max(0, position) % capacityFrames;
-                    readerNextPts = double.NaN;
                 }
             }
 
@@ -1670,39 +1899,53 @@ namespace OdinOnDemand.MPlayer
                 int sourceFrameOffset = 0;
                 lock (gate)
                 {
+                    if (diagnosticsEnabled)
+                    {
+                        diagnostics.WriteCallbacks++;
+                        diagnostics.ReceivedFrames += frames;
+                    }
                     if (!active)
                     {
+                        if (diagnosticsEnabled)
+                            diagnostics.InactiveWriteFrames += frames;
                         return;
                     }
 
                     long clockNow = NativeClock.Now();
+                    if (diagnosticsEnabled && clockNow > 0)
+                    {
+                        if (lastDiagnosticWriteAt > 0)
+                            diagnostics.MaxWriteGapMicroseconds = Math.Max(
+                                diagnostics.MaxWriteGapMicroseconds, clockNow - lastDiagnosticWriteAt);
+                        lastDiagnosticWriteAt = clockNow;
+                    }
                     if (pts <= 0 && clockNow <= 0)
                     {
                         ReportClockFailureLocked();
                         return;
                     }
                     double packetPts = pts > 0 ? pts : clockNow + outputLeadMicroseconds;
-                    if (countFrames == 0)
+                    bool readerUnderrun = countFrames == 0 &&
+                        readerNextPts > firstSamplePts + TimestampToleranceFrames * MicrosecondsPerSecond / sampleRate;
+                    if (double.IsNaN(firstSamplePts) || readerUnderrun)
                     {
                         firstSamplePts = packetPts;
                     }
-                    else
+                    else if (pts > 0)
                     {
                         double expectedPts = firstSamplePts +
                                              countFrames * MicrosecondsPerSecond / sampleRate;
-                        double differenceFrames =
-                            (packetPts - expectedPts) * sampleRate / MicrosecondsPerSecond;
-                        if (Math.Abs(differenceFrames) <= TimestampToleranceFrames)
+                        if (diagnosticsEnabled)
+                            diagnostics.MaxPtsSkewMicroseconds = Math.Max(
+                                diagnostics.MaxPtsSkewMicroseconds, Math.Abs(packetPts - expectedPts));
+                        // PTS is a scheduling clock, not an exact PCM sample index. Keep the
+                        // sample-derived timeline (even when the queue is exactly drained),
+                        // rather than shifting buffered audio on every rounded/jittered packet.
+                        // Compare against that timeline so tolerated skew cannot grow unbounded.
+                        if (Math.Abs(packetPts - expectedPts) > PacketDiscontinuityMicroseconds)
                         {
-                            // Resamplers round packet lengths to whole frames. Re-anchor the
-                            // queued PTS by that fractional error instead of accumulating it
-                            // until ordinary packets are mistaken for a discontinuity.
-                            firstSamplePts += packetPts - expectedPts;
-                        }
-                        else
-                        {
-                            // A seek or decoder discontinuity invalidates queued PCM. Keeping it
-                            // would make audio drift from the shared LibVLC media clock.
+                            if (diagnosticsEnabled)
+                                diagnostics.PtsResets++;
                             ClearLocked();
                             firstSamplePts = packetPts;
                         }
@@ -1723,9 +1966,18 @@ namespace OdinOnDemand.MPlayer
                             }
                             double expiredFrames = (now - firstSamplePts) * sampleRate / MicrosecondsPerSecond;
                             if (expiredFrames >= 1d)
-                                DiscardLocked((int)Math.Min(countFrames, expiredFrames));
+                            {
+                                int discarded = (int)Math.Min(countFrames, expiredFrames);
+                                if (diagnosticsEnabled)
+                                    diagnostics.ExpiredFrames += discarded;
+                                DiscardLocked(discarded);
+                            }
                             else
+                            {
+                                if (diagnosticsEnabled)
+                                    diagnostics.FullWaits++;
                                 Monitor.Wait(gate, 20);
+                            }
                         }
                         if (!active || generation != presentationGeneration)
                         {
@@ -1744,6 +1996,8 @@ namespace OdinOnDemand.MPlayer
                         writeFrame = (writeFrame + contiguousFrames) % capacityFrames;
                         countFrames += contiguousFrames;
                         sourceFrameOffset += contiguousFrames;
+                        if (diagnosticsEnabled)
+                            diagnostics.WrittenFrames += contiguousFrames;
                     }
                 }
             }
@@ -1774,10 +2028,17 @@ namespace OdinOnDemand.MPlayer
 
                 lock (gate)
                 {
+                    if (diagnosticsEnabled)
+                    {
+                        diagnostics.ReadCallbacks++;
+                        diagnostics.RequestedFrames += requestedFrames;
+                    }
                     int readPosition = clipReadPosition;
                     clipReadPosition = (clipReadPosition + requestedFrames) % capacityFrames;
                     if (!active)
                     {
+                        if (diagnosticsEnabled)
+                            diagnostics.InactiveReadFrames += requestedFrames;
                         Array.Clear(destination, 0, destination.Length);
                         return;
                     }
@@ -1787,18 +2048,29 @@ namespace OdinOnDemand.MPlayer
                         Array.Clear(destination, 0, destination.Length);
                         return;
                     }
+                    if (diagnosticsEnabled)
+                    {
+                        if (lastDiagnosticReadAt > 0)
+                            diagnostics.MaxReadGapMicroseconds = Math.Max(
+                                diagnostics.MaxReadGapMicroseconds, now - lastDiagnosticReadAt);
+                        lastDiagnosticReadAt = now;
+                    }
 
                     // Unity 6 explicitly makes timeSamples thread-safe. PCMReaderCallback runs
                     // ahead of the mixer; scheduling against wall time alone makes audio late.
                     int queuedFrames = readPosition - output.timeSamples;
                     if (queuedFrames < 0)
                         queuedFrames += capacityFrames;
+                    if (diagnosticsEnabled)
+                        diagnostics.PrefetchFrames = queuedFrames;
                     double desiredStart = now + outputLeadMicroseconds +
                                           queuedFrames * MicrosecondsPerSecond / sampleRate;
                     if (double.IsNaN(readerNextPts) ||
                         readerNextPts < desiredStart - ReaderLateResetMicroseconds ||
                         readerNextPts > desiredStart + ReaderAheadResetMicroseconds)
                     {
+                        if (diagnosticsEnabled && !double.IsNaN(readerNextPts))
+                            diagnostics.ReaderResets++;
                         readerNextPts = desiredStart;
                     }
 
@@ -1807,6 +2079,11 @@ namespace OdinOnDemand.MPlayer
                         if (countFrames == 0)
                         {
                             int silentFrames = requestedFrames - outputFrame;
+                            if (diagnosticsEnabled)
+                            {
+                                diagnostics.Underruns++;
+                                diagnostics.UnderrunFrames += silentFrames;
+                            }
                             Array.Clear(destination, outputFrame * channels, silentFrames * channels);
                             readerNextPts += silentFrames * MicrosecondsPerSecond / sampleRate;
                             outputFrame += silentFrames;
@@ -1819,6 +2096,8 @@ namespace OdinOnDemand.MPlayer
                         {
                             int silentFrames = Math.Min(requestedFrames - outputFrame,
                                 Math.Max(1, (int)Math.Ceiling(deltaFrames)));
+                            if (diagnosticsEnabled)
+                                diagnostics.ScheduledSilenceFrames += silentFrames;
                             Array.Clear(destination, outputFrame * channels, silentFrames * channels);
                             readerNextPts += silentFrames * MicrosecondsPerSecond / sampleRate;
                             outputFrame += silentFrames;
@@ -1829,12 +2108,16 @@ namespace OdinOnDemand.MPlayer
                         {
                             int staleFrames = Math.Min(countFrames,
                                 Math.Max(1, (int)Math.Floor(-deltaFrames)));
+                            if (diagnosticsEnabled)
+                                diagnostics.LateFrames += staleFrames;
                             DiscardLocked(staleFrames);
                             continue;
                         }
 
                         int copyFrames = Math.Min(requestedFrames - outputFrame, countFrames);
                         CopyLocked(destination, outputFrame, copyFrames);
+                        if (diagnosticsEnabled)
+                            diagnostics.SubmittedFrames += copyFrames;
                         outputFrame += copyFrames;
                         readerNextPts += copyFrames * MicrosecondsPerSecond / sampleRate;
                     }
@@ -1881,10 +2164,12 @@ namespace OdinOnDemand.MPlayer
 
             private void ClearLocked()
             {
+                if (diagnosticsEnabled)
+                    diagnostics.ClearedFrames += countFrames;
                 readFrame = 0;
                 writeFrame = 0;
                 countFrames = 0;
-                firstSamplePts = 0d;
+                firstSamplePts = double.NaN;
                 readerNextPts = double.NaN;
                 presentationGeneration = unchecked(presentationGeneration + 1);
             }

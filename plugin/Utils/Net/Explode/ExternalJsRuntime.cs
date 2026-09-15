@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Logger = Jotunn.Logger;
 
 namespace OdinOnDemand.Utils.Net.Explode
@@ -8,7 +7,7 @@ namespace OdinOnDemand.Utils.Net.Explode
     /// <summary>
     ///     Tracks the external JavaScript runtime that yt-dlp needs for YouTube's challenge
     ///     solvers (EJS). The official yt-dlp.exe bundles the solver scripts, so only the
-    ///     runtime has to be present: on PATH, or beside yt-dlp.exe.
+    ///     runtime has to be present: beside yt-dlp.exe, or on the process or registry PATH.
     /// </summary>
     internal static class ExternalJsRuntime
     {
@@ -33,16 +32,16 @@ namespace OdinOnDemand.Utils.Net.Explode
         public static bool ChallengeFailed { get; private set; }
 
         /// <summary>
-        ///     yt-dlp option value for a runtime it does not enable by default, or null when the
-        ///     default lookup already covers it.
+        ///     Explicit yt-dlp runtime location, including Deno: registry PATH entries may be
+        ///     newer than the process PATH inherited by yt-dlp.
         /// </summary>
         public static string JsRuntimesArgument =>
-            RuntimeName == null || RuntimeName == "deno" ? null : RuntimeName + ":" + RuntimePath;
+            RuntimeName == null ? null : RuntimeName + ":" + RuntimePath;
 
         /// <summary>Re-probes the search locations and logs any change in availability.</summary>
         public static void Refresh()
         {
-            var searchRoots = GetSearchRoots();
+            var searchRoots = ExecutableSearch.Directories(BepInEx.Paths.GameRootPath);
             RuntimeName = null;
             RuntimePath = null;
 
@@ -50,7 +49,7 @@ namespace OdinOnDemand.Utils.Net.Explode
             {
                 foreach (var root in searchRoots)
                 {
-                    var path = FindExecutable(root, runtime);
+                    var path = ExecutableSearch.Find(root, runtime);
                     if (path == null) continue;
                     RuntimeName = runtime;
                     RuntimePath = path;
@@ -104,39 +103,6 @@ namespace OdinOnDemand.Utils.Net.Explode
                         : "No JavaScript runtime was found. ") +
                     $"Setup guide: {SetupGuideUrl}");
                 return;
-            }
-        }
-
-        private static IEnumerable<string> GetSearchRoots()
-        {
-            // yt-dlp searches its own folder on Windows before falling back to PATH.
-            yield return BepInEx.Paths.GameRootPath;
-
-            var pathVariable = Environment.GetEnvironmentVariable("PATH");
-            if (string.IsNullOrEmpty(pathVariable)) yield break;
-
-            foreach (var entry in pathVariable.Split(Path.PathSeparator))
-            {
-                if (!string.IsNullOrEmpty(entry)) yield return entry.Trim('"');
-            }
-        }
-
-        private static string FindExecutable(string directory, string runtime)
-        {
-            if (string.IsNullOrEmpty(directory)) return null;
-
-            try
-            {
-                var windowsPath = Path.Combine(directory, runtime + ".exe");
-                if (File.Exists(windowsPath)) return windowsPath;
-
-                var path = Path.Combine(directory, runtime);
-                return File.Exists(path) ? path : null;
-            }
-            catch (ArgumentException)
-            {
-                // Malformed PATH entries are common; skip them instead of failing detection.
-                return null;
             }
         }
     }

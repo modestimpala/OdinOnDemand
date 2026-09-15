@@ -14,7 +14,8 @@ OdinOnDemand (OOD) adds tons of unique mediaplayers to Valheim that allow you to
 ### What's new in 1.2
 
 - **Valheim 1.0 support** - updated for the latest version of the game. The **OdinOnDemand** build-menu group (category) is back, rebuilt on 1.0's new usage-tag system.
-- **VLC-powered streaming** - video and audio streams are decoded by a packaged **LibVLC 3.0.23** runtime and rendered into screens and audio sources. Quality is no longer limited to YouTube's old combined "muxed" formats, and nothing is downloaded, remuxed, or written to disk. Tested working on Proton too!
+- **VLC-powered streaming** - video and audio streams are decoded by a packaged **LibVLC 3.0.23** runtime and rendered into screens and audio sources. Quality is no longer limited to YouTube's old combined "muxed" formats. VLC streams media without full-file downloads or remuxing. Tested working on Proton too!
+- **Twitch and Kick Playback!** - Full Streamlink support, allowing HLS playback from sites like Twitch and Kick in-game.
 - **Max Quality setting** - pick 360p through 2160p (1080p default) from the cog menu. Affects performance. 
 - **External JS status** - modern yt-dlp needs a JavaScript runtime to unlock full YouTube formats. The cog menu now tells you whether one was found and links the setup guide if not. This is really important for YouTube playback, so please check it if you have issues.
 
@@ -49,6 +50,7 @@ If you are enjoying the mod, please consider donating to my Ko-Fi.
   - Cart - "Bard's Wagon",  buildable. Used by pointing and clicking with remote control.
   - Belt - "Skald's Girdle", purchased from Haldor, with configurable recipe. Used by equipping & using remote control when pointing at empty space, e.g. not at a mediaplayer. Admins can point and click at other user's Belt and open it's menu.
 - YouTube playlist support
+- Online radio streams and Twitch/Kick channels (live channels require optional Streamlink on each client).
 - Wide website support: Vimeo, TikTok, Dailymotion, Facebook, Instagram, Twitter, reddit, etc. Just try your site of choice and it may return a valid file.
 - Unique dynamic radio stations system with easy radio addon support 
 - New Music Waveform Visualizer 
@@ -70,10 +72,25 @@ Installation of the plugin is fairly straightforward, just install into Bepinex/
 YouTube playback uses yt-dlp (single videos), YoutubeExplode (playlists), and VLC (LibVLC); Pure Unity `VideoPlayer` is not really supported for YouTube anymore. Streams are decoded without downloading the complete file or requiring `ffmpeg.exe`.
 
 - **Use Nightly yt-dlp** requests nightly updates for local playback. Disabling it does not downgrade yt-dlp or affect a remote NodeJS server.
-- **Max Quality** caps resolution from 360p to 2160p (1080p default). Lower it to reduce software-decoding and frame-upload costs, especially with multiple players.
-- **External JS** shows the detected challenge-solving runtime. Install Deno 2.3+ beside `yt-dlp.exe`; Proton requires Windows x64 `deno.exe`. The plugin also searches `PATH` for Deno, Node, Bun, or QuickJS. Without one, **quality or audio availability may be limited**. See the [EJS setup guide](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+- **Max Quality** sets the preferred resolution limit from 360p to 2160p (1080p default). YouTube's final fallback may exceed this limit if no compatible format fits; the Streamlink live-video cap is strict. Lower it to reduce software-decoding and frame-upload costs, especially with multiple players.
+- **External JS** shows the detected challenge-solving runtime. Install Deno 2.3+ beside `yt-dlp.exe`; Proton requires Windows x64 `deno.exe`. The plugin also searches `PATH` for Deno, Node, Bun, or QuickJS, including the Windows registry PATH, and passes the detected executable path directly to yt-dlp. Without one, **quality or audio availability may be limited**. See the [EJS setup guide](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
 
 High-quality playback requires the packaged **LibVLCSharp 3.10.1**, **LibVLC 3.0.23**, and complete `libvlc/win-x64/` directory beside `OdinOnDemand.dll` on every client. Copying only the plugin DLL is not enough. 
+
+### Online radio, Twitch and Kick
+
+Paste the URL into any player's normal URL field:
+
+- **Radio:** paste a direct HTTP(S) station URL. VLC streams it without downloading the broadcast or requiring a file extension, yt-dlp, or Streamlink. Audio-only sources show the radio panel and waveform visualizer.
+- **Twitch and Kick:** install [Streamlink](https://streamlink.github.io/install.html) on every client. The cog menu shows its detection status. Streamlink resolves the channel, and the packaged VLC runtime plays the HLS stream in-game.
+  - **Windows:** place `streamlink.exe` on `PATH`, beside `OdinOnDemand.dll`, or in the game directory. OOD also reads registry `PATH` values; reopen the cog menu to re-probe after changes.
+  - **Wine/Proton:** use Windows Streamlink, or install Linux Streamlink in `/usr/bin`, `/usr/local/bin`, or `$HOME/.local/bin` with Python 3 in `/usr/bin/python3` or `/bin/python3`. OOD bridges to the host automatically, including from Steam's pressure-vessel container. Keep Steam running; do not install Streamlink in the Steam runtime. Other Linux locations are not detected.
+  - **Max Quality** caps live video by height and prefers higher frame rates at the same resolution. If no video fits, OOD uses audio-only when available. 
+
+Live streams have no shared seek position. Pausing freezes and mutes local output while the stream continues; resuming rejoins it. Each multiplayer client resolves the URL independently, so latency may vary. Finite media remains synchronized.
+
+Before playback, OOD probes direct HTTP sources to identify websites, radio, and live or finite HLS. HLS probing allows 10 seconds, four playlist levels, and 256 KiB per playlist. Malformed or oversized playlists produce a playback error.
+
 
 ## Use
 
@@ -81,7 +98,7 @@ High-quality playback requires the packaged **LibVLCSharp 3.10.1**, **LibVLC 3.0
 In game, place down a mediaplayer. Interact with it to open the GUI.
 
 #### Remote Playback
-You can paste direct links into the URL field to play online remote files. The linked file should be of a [compatible codec](https://docs.unity3d.com/2020.1/Documentation/Manual/VideoSources-FileCompatibility.html).
+You can paste direct HTTP(S) audio/video stream URLs into the URL field; these use the packaged VLC decoder. Website pages identified by their HTML response still use the configured yt-dlp backend.
 You can also paste youtube/youtu.be links and the plugin will process this for you on all mediaplayers.
 
 All mediaplayers have the added ability to play audio files of [compatible codecs](https://support.unity.com/hc/en-us/articles/206484803-What-are-the-supported-Audio-formats-in-Unity-), as well as soundcloud.com links - some SoundCloud songs are unavailable, depending on the artist and how they upload/license their art.
@@ -98,6 +115,9 @@ You can bundle video files with your modpacks or instruct Vikings to place files
 
 #### Youtube Playlists
 Mediaplayers have support for Youtube playlists. When a playlist is set, new info will appear in the UI. The Viking who initially sets the playlist handles playlist logic, so if they leave the area or disconnect playlist playback will stop. It is multiplayer synced. Do not skip through tracks too fast. You can choose to shuffle or loop the playlist. If looping, the whole playlist will loop - not individual videos. The last video played will be saved as the autoplay video.
+
+#### Now Playing
+Without a playlist, these rows show the current title and time (`elapsed / total` or `LIVE <elapsed>`). Long titles are truncated.
 
 #### Time Sync
 Mediaplayers will regularly send out requests to sync time with current mediaplayer (ZDO) owner. You can configure the time between requests sent in the Config file.
@@ -192,6 +212,24 @@ Once a player initiates playback of a station via a mediaplayer, they receive th
 
 Starting with OOD 1.0, config files are now stored in BepInEx\config\OdinOnDemand\
 The config includes settings for YouTube API selection, volume control, distance parameters for audio playback, server and client-side configurations, remote control functionalities, VIP mode settings, and audio fade options. It allows for extensive customization of media player behavior in the game, including options for enabling or disabling certain features, adjusting volumes, setting distances for audio reception, and specifying admin-only settings.
+
+### VLC audio diagnostics
+
+To diagnose audio issues, enable this client-side option in the existing `[YouTube]` section of `BepInEx/config/OdinOnDemand/config.cfg`:
+
+```ini
+[YouTube]
+Decoder Audio Stats = true
+```
+
+It defaults to `false` and covers all VLC playback. While enabled, `[VLC audio #N]` summaries are written to the output log every five seconds and when playback ends or the game shuts down. 
+
+Logs include the PCM format, Unity output rate, DSP buffer settings, and:
+
+- Callback and frame counts from VLC through Unity. **Submitted does not mean audible**; measurement stops before mixing, spatialization, and device output.
+- Queue underruns, scheduled silence, inactive reads/writes, dropped or cleared frames, timing resets, flushes, callbacks, and seeks.
+- Queue and prefetch duration, backpressure, callback gaps, and AudioSource state, pitch, and volume.
+
 
 ## Recipes
 

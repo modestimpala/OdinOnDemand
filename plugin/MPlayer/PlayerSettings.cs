@@ -52,6 +52,9 @@ namespace OdinOnDemand.MPlayer
         
         public Sprite Thumbnail { get; set; }
 
+        /// <summary>Title of the playing media, shown in the URL panel. Null when unknown.</summary>
+        public string MediaTitle { get; set; }
+
         public enum LinkType
         {
             Youtube,
@@ -60,6 +63,8 @@ namespace OdinOnDemand.MPlayer
             Audio,
             RelativeAudio,
             RelativeVideo,
+            NetworkStream,
+            LiveChannel,
         }
 
         public enum PlayerMode
