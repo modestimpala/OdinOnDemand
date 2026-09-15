@@ -4,12 +4,13 @@
 ### Versions:
 
 ## 1.2.5
- - Added online radio playback through VLC with support for station URLs without file extensions; HTML website links are handled by extractors. With waveform support. Thanks isimp for the suggestion. 
+ - Added online radio playback through VLC with support for station URLs without file extensions, with waveform support. Thanks isimp for the suggestion. 
  - Added optional Streamlink detection, adding in full support for Twitch and Kick playback!
- - Added a second YouTube format for fallback. 
+ - Added a fallback YouTube extraction client.
  - Fixed external runtimes not being detected when they were added to `PATH` after Steam started.
- - Sped up YouTube loading by no longer checking for a yt-dlp update before every video. It now checks once per session, or per setting change. 
- - Changed LibVLC/VLC audio decoder from "ugly" to "speex": 
+ - Fixed registry-discovered Deno being shown as available without passing its executable path to yt-dlp.
+ - Sped up YouTube loading by no longer checking for a yt-dlp update before every video. It now checks once per player instance, or after a setting change.
+ - Changed the LibVLC audio resampler from "ugly" to "speex":
   - Fixed YouTube audio drifting out of sync or cutting out during long playback.
   - Fixed gradual audio desync on 44.1 kHz sources.
  - Added an optional **Decoder Audio Stats** setting that logs audio diagnostics for bug reports.

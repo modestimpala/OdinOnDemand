@@ -212,7 +212,7 @@ namespace OdinOnDemand.Utils.Net.Explode
                 NoPlaylist = true
             };
             if (extractorArgs != null) options.ExtractorArgs = extractorArgs;
-            // Only deno is enabled by default; point yt-dlp at any other runtime we located.
+            // Pass the discovered path even for Deno; yt-dlp cannot see registry-only PATH updates.
             var jsRuntimes = ExternalJsRuntime.JsRuntimesArgument;
             if (jsRuntimes != null) options.AddCustomOption("--js-runtimes", jsRuntimes);
             var operation = Ytdl.RunWithOptions(new[] { url }, options, cts.Token);

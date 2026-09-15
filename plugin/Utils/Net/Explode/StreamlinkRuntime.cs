@@ -5,9 +5,11 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Logger = Jotunn.Logger;
 
 namespace OdinOnDemand.Utils.Net.Explode
@@ -20,12 +22,16 @@ namespace OdinOnDemand.Utils.Net.Explode
         private static readonly Encoding Utf8 = new UTF8Encoding(false);
         private static readonly bool IsWindows = Environment.OSVersion.Platform == PlatformID.Win32NT;
         private static readonly bool IsWine = DetectWine();
+        private static readonly Regex VideoQuality = new Regex(
+            @"\A([0-9]+)p([0-9]+)?\+?(?:[a_][0-9]+k)?(?:_portrait)?(?:_(?:hls|http))?(?:_alt[0-9]*)?\z",
+            RegexOptions.CultureInvariant);
         private static volatile Runtime _runtime;
 
         private sealed class Runtime
         {
             public string Path;
             public string Python;
+            public string HostLauncher;
         }
 
         public static bool Detected => _runtime != null;
@@ -93,17 +99,26 @@ namespace OdinOnDemand.Utils.Net.Explode
                 break;
             }
 
-            // Windows PATH is not the host's PATH. Probe host paths through Wine's mapping API.
+            // Wine PATH is not Linux PATH. Steam also replaces /usr with its container runtime:
+            // probe the mounted host /usr, then launch outside the container for Python's modules.
             if (found == null && IsWine)
             {
-                var python = FindHostFile("/usr/bin/python3") ?? FindHostFile("/bin/python3");
+                var hostLauncher = FindHostFile("/run/host/usr/bin/python3") == null ? null :
+                    FindHostFile("/usr/bin/steam-runtime-launch-client") ??
+                    FindHostFile("/usr/lib/pressure-vessel/from-host/bin/steam-runtime-launch-client");
+                var python = hostLauncher == null
+                    ? FindHostFile("/usr/bin/python3") ?? FindHostFile("/bin/python3")
+                    : "/usr/bin/python3";
                 if (python != null)
                 {
                     foreach (var root in HostSearchRoots())
                     {
-                        var path = FindHostFile(root.TrimEnd('/') + "/streamlink");
-                        if (path == null) continue;
-                        found = new Runtime { Path = path, Python = python };
+                        var path = root.TrimEnd('/') + "/streamlink";
+                        // Pressure-vessel remounts /usr; the home directory is shared unchanged.
+                        var probe = hostLauncher != null && path.StartsWith("/usr/", StringComparison.Ordinal)
+                            ? "/run/host" + path : path;
+                        if (FindHostFile(probe) == null) continue;
+                        found = new Runtime { Path = path, Python = python, HostLauncher = hostLauncher };
                         break;
                     }
                 }
@@ -111,10 +126,11 @@ namespace OdinOnDemand.Utils.Net.Explode
 
             var previous = _runtime;
             _runtime = found;
-            if (previous?.Path == found?.Path) return;
+            if (previous?.Path == found?.Path && previous?.HostLauncher == found?.HostLauncher) return;
             if (found != null)
                 Logger.LogInfo("Streamlink detected: " + found.Path +
-                               (found.Python == null ? "" : " (Linux host via Wine start /unix)"));
+                               (found.Python == null ? "" : found.HostLauncher == null
+                                   ? " (Linux via Wine start /unix)" : " (Linux host via Steam launch client)"));
         }
 
         public static async Task<string> ResolveAsync(string url, int maxHeight, CancellationToken token)
@@ -132,15 +148,15 @@ namespace OdinOnDemand.Utils.Net.Explode
             if (runtime == null)
                 throw new InvalidOperationException(service + " needs Streamlink. Install streamlink.exe on Windows " +
                     "PATH or beside OdinOnDemand.dll. Under Wine/Proton, install Linux Streamlink in /usr/bin, " +
-                    "/usr/local/bin or ~/.local/bin and Python 3 in /usr/bin/python3.");
+                    "/usr/local/bin or ~/.local/bin and Python 3 in /usr/bin/python3. Steam containers also " +
+                    "require steam-runtime-launch-client and the running Steam client to launch host tools.");
 
-            // The next integer height admits e.g. 720p60 while excluding all 721p+ video.
-            // Never select best-unfiltered: it would silently defeat the configured height cap.
+            // Enumerate once: Streamlink's sorting weight adds FPS to height, so its
+            // sorting excludes cannot enforce a resolution cap (720p60 weighs 780).
             var arguments = new[]
             {
-                "--no-config", "--loglevel", "error", "--stream-url", "--http-timeout", "15",
-                "--stream-sorting-excludes", ">=" + ((long)maxHeight + 1).ToString(CultureInfo.InvariantCulture) + "p",
-                "--", url, "best,audio_only"
+                "--no-config", "--loglevel", "error", "--json", "--http-timeout", "15",
+                "--", url
             };
             var result = runtime.Python == null
                 ? await ResolveNativeAsync(runtime.Path, arguments, token).ConfigureAwait(false)
@@ -152,15 +168,99 @@ namespace OdinOnDemand.Utils.Net.Explode
                     "height cap. Update Streamlink if " + service + " extraction has changed. " +
                     ErrorDetail(result.Error, result.Output));
 
+            return SelectStreamUrl(result.Output, maxHeight);
+        }
+
+        private static string SelectStreamUrl(string output, int maxHeight)
+        {
+            JObject document;
+            try
+            {
+                document = JObject.Parse(output, new JsonLoadSettings
+                {
+                    DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error
+                });
+            }
+            catch (JsonException e)
+            {
+                throw new InvalidOperationException("Streamlink returned malformed or truncated stream JSON. " +
+                    "Update Streamlink and check that the channel is live.", e);
+            }
+            if (!(document["streams"] is JObject streams) ||
+                (document["error"] != null && document["error"].Type != JTokenType.Null))
+                throw new InvalidOperationException("Streamlink did not return a valid stream enumeration. " +
+                    "Update Streamlink and check that the channel is live.");
+
+            string selectedUrl = null;
+            string selectedName = null;
+            string audioUrl = null;
+            var selectedHeight = 0;
+            var selectedFps = 0;
+            foreach (var entry in streams.Properties())
+            {
+                if (!(entry.Value is JObject stream)) continue;
+                var streamUrl = HttpStreamUrl(stream);
+                if (streamUrl == null) continue;
+                if (entry.Name == "audio_only")
+                {
+                    audioUrl = streamUrl;
+                    continue;
+                }
+
+                // HLS/HTTP JSON exposes resolution/FPS in the quality name, not metadata.
+                // Require a concrete height: best/worst (including unfiltered aliases),
+                // source and bitrate-only names cannot prove that video is within the cap.
+                var quality = VideoQuality.Match(entry.Name);
+                if (!quality.Success ||
+                    !int.TryParse(quality.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture,
+                        out var height) || height <= 0 || height > maxHeight)
+                    continue;
+                var fps = 0;
+                if (quality.Groups[2].Success &&
+                    (!int.TryParse(quality.Groups[2].Value, NumberStyles.None, CultureInfo.InvariantCulture,
+                        out fps) || fps <= 0))
+                    continue;
+                if (height < selectedHeight ||
+                    (height == selectedHeight && (fps < selectedFps ||
+                        (fps == selectedFps && string.CompareOrdinal(entry.Name, selectedName) >= 0))))
+                    continue;
+                selectedHeight = height;
+                selectedFps = fps;
+                selectedName = entry.Name;
+                selectedUrl = streamUrl;
+            }
+
+            return selectedUrl ?? audioUrl ?? throw new InvalidOperationException(
+                "Streamlink returned no supported HTTP(S) video stream within the " +
+                maxHeight.ToString(CultureInfo.InvariantCulture) +
+                "p height cap and no audio_only fallback. Streams with unknown resolution or unsupported " +
+                "transport cannot be selected safely.");
+        }
+
+        private static string HttpStreamUrl(JObject stream)
+        {
+            var type = stream["type"];
+            if (type?.Type != JTokenType.String ||
+                ((string)type != "hls" && (string)type != "http"))
+                return null;
+            // DASH exposes a master MPD, not the selected representation; muxed streams
+            // need Streamlink itself. Neither can be reduced to a capped playback URL.
+            var method = stream["method"];
+            var body = stream["body"];
+            if ((method != null && (method.Type != JTokenType.String || (string)method != "GET")) ||
+                (body != null && body.Type != JTokenType.Null))
+                return null;
+            if (stream["url"]?.Type != JTokenType.String) return null;
+            var streamUrl = (string)stream["url"];
             // Validate, but return the original text: Uri.AbsoluteUri can rewrite signed query escaping.
-            var streamUrl = result.Output.TrimEnd('\r', '\n');
-            if (streamUrl.Length == 0 || streamUrl.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0 ||
+            // Use the concrete HLS url, never its optional master playlist URL.
+            if (streamUrl.Length == 0 || char.IsWhiteSpace(streamUrl[0]) ||
+                char.IsWhiteSpace(streamUrl[streamUrl.Length - 1]) ||
+                streamUrl.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0 ||
                 !Uri.TryCreate(streamUrl, UriKind.Absolute, out var streamUri) ||
                 (streamUri.Scheme != Uri.UriSchemeHttp && streamUri.Scheme != Uri.UriSchemeHttps) ||
                 string.IsNullOrEmpty(streamUri.Host) || !string.IsNullOrEmpty(streamUri.UserInfo))
-                throw new InvalidOperationException("Streamlink did not return a single HTTP(S) stream URL. " +
-                                                    "Update Streamlink and check that the " + service +
-                                                    " channel is live.");
+                return null;
             return streamUrl;
         }
 
@@ -239,7 +339,10 @@ namespace OdinOnDemand.Utils.Net.Explode
                 launcher = new Process
                 {
                     StartInfo = StartInfo(Path.Combine(Environment.SystemDirectory, "start.exe"),
-                        new[] { "/unix", runtime.Python, unixScript }, true)
+                        runtime.HostLauncher == null
+                            ? new[] { "/unix", runtime.Python, unixScript }
+                            : new[] { "/unix", runtime.HostLauncher, "--alongside-steam", "--directory=/",
+                                "--", runtime.Python, unixScript }, true)
                 };
                 launched = launcher.Start();
                 if (!launched) throw new InvalidOperationException("Wine could not launch the Linux Streamlink bridge.");
@@ -250,10 +353,10 @@ namespace OdinOnDemand.Utils.Net.Explode
                 {
                     token.ThrowIfCancellationRequested();
                     if (clock.Elapsed.TotalSeconds >= TimeoutSeconds + 5)
-                        throw new TimeoutException("Linux Streamlink timed out. Check Wine start /unix support and host Python 3/Streamlink installation.");
+                        throw new TimeoutException("Linux Streamlink timed out. Check Wine start /unix, Steam host launch support, and host Python 3/Streamlink installation.");
                     if (launcher.HasExited && launcher.ExitCode != 0)
-                        throw new InvalidOperationException("Wine start /unix could not launch host Python 3. " +
-                            (stderr.IsCompleted ? await stderr.ConfigureAwait(false) : "Check the Wine installation."));
+                        throw new InvalidOperationException("Wine/Steam could not launch host Python 3. " +
+                            (stderr.IsCompleted ? await stderr.ConfigureAwait(false) : "Check the Wine/Steam installation."));
                     await Task.Delay(100, token).ConfigureAwait(false);
                 }
                 var status = File.ReadAllText(done, Utf8);

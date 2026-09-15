@@ -32,11 +32,11 @@ namespace OdinOnDemand.Utils.Net.Explode
         public static bool ChallengeFailed { get; private set; }
 
         /// <summary>
-        ///     yt-dlp option value for a runtime it does not enable by default, or null when the
-        ///     default lookup already covers it.
+        ///     Explicit yt-dlp runtime location, including Deno: registry PATH entries may be
+        ///     newer than the process PATH inherited by yt-dlp.
         /// </summary>
         public static string JsRuntimesArgument =>
-            RuntimeName == null || RuntimeName == "deno" ? null : RuntimeName + ":" + RuntimePath;
+            RuntimeName == null ? null : RuntimeName + ":" + RuntimePath;
 
         /// <summary>Re-probes the search locations and logs any change in availability.</summary>
         public static void Refresh()

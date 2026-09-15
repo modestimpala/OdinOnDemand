@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 using System.Threading;
 using OdinOnDemand.Components;
@@ -48,7 +49,7 @@ namespace OdinOnDemand.MPlayer
         private bool hasPendingPlaybackTime;
         private bool youtubeBackendActive;
         private bool youtubeLoading;
-        private CancellationTokenSource streamlinkCancellation;
+        private CancellationTokenSource networkCancellation;
         private float indicatorHoldUntil;
         private Coroutine videoOutputWatch;
 
@@ -138,7 +139,7 @@ namespace OdinOnDemand.MPlayer
         public void OnDestroy()
         {
             playbackGeneration++;
-            CancelStreamlink();
+            CancelNetworkPreparation();
             DestroyYoutubeBackend();
             if (mScreen != null)
             {
@@ -492,7 +493,7 @@ namespace OdinOnDemand.MPlayer
         private int BeginSourceSwitch(double initialTime)
         {
             playbackGeneration++;
-            CancelStreamlink();
+            CancelNetworkPreparation();
             DestroyYoutubeBackend();
             if (DynamicStationCoroutine != null)
             {
@@ -537,7 +538,7 @@ namespace OdinOnDemand.MPlayer
         }
 
         private void PrepareVlcBackend(string videoUrl, string audioUrl, int generation,
-            IDictionary<string, string> headers = null, bool useChunkedInput = true)
+            IDictionary<string, string> headers = null, bool useChunkedInput = true, bool isLive = false)
         {
             if (generation != playbackGeneration || !UsesVlcBackend())
                 return;
@@ -571,7 +572,8 @@ namespace OdinOnDemand.MPlayer
                     mAudio,
                     mScreen != null ? mScreen.targetTexture : null,
                     headers,
-                    useChunkedInput);
+                    useChunkedInput,
+                    isLive);
             }
             catch (Exception exception)
             {
@@ -580,10 +582,10 @@ namespace OdinOnDemand.MPlayer
             }
         }
 
-        private void CancelStreamlink()
+        private void CancelNetworkPreparation()
         {
-            streamlinkCancellation?.Cancel();
-            streamlinkCancellation = null;
+            networkCancellation?.Cancel();
+            networkCancellation = null;
         }
 
         private IEnumerator PlayLiveChannel(string url, string service, int generation)
@@ -593,11 +595,11 @@ namespace OdinOnDemand.MPlayer
             if (UIController.LoadingIndicatorObj) UIController.LoadingIndicatorObj.SetActive(true);
             using (var cancellation = new CancellationTokenSource())
             {
-                streamlinkCancellation = cancellation;
+                networkCancellation = cancellation;
                 var resolution = StreamlinkRuntime.ResolveAsync(url, OODConfig.MaxVideoHeight.Value,
                     cancellation.Token);
                 yield return new WaitUntil(() => resolution.IsCompleted);
-                if (ReferenceEquals(streamlinkCancellation, cancellation)) streamlinkCancellation = null;
+                if (ReferenceEquals(networkCancellation, cancellation)) networkCancellation = null;
                 // Observe exceptions even when a newer source has superseded this request.
                 var error = resolution.Exception?.GetBaseException();
                 if (generation != playbackGeneration || resolution.IsCanceled) yield break;
@@ -608,30 +610,135 @@ namespace OdinOnDemand.MPlayer
                         UIController.SetLoadingIndicatorText(error.Message);
                     yield break;
                 }
-                PrepareVlcBackend(resolution.Result, null, generation, useChunkedInput: false);
+                PrepareVlcBackend(resolution.Result, null, generation, useChunkedInput: false, isLive: true);
             }
         }
 
         private IEnumerator PrepareNetworkStream(string url, int generation)
         {
             youtubeLoading = true;
-            // Preserve website extraction without mistaking extensionless radio mounts for websites.
-            using (var probe = UnityWebRequest.Head(url))
+            using (var cancellation = new CancellationTokenSource())
             {
-                probe.timeout = 10;
-                yield return probe.SendWebRequest();
+                networkCancellation = cancellation;
+                cancellation.CancelAfter(TimeSpan.FromSeconds(10));
+                // Probe off-thread: an extensionless mount can be radio, HLS, a file or a website.
+                var probe = Task.Run(() => ProbeNetworkStream(url, cancellation.Token));
+                yield return new WaitUntil(() => probe.IsCompleted);
+                if (ReferenceEquals(networkCancellation, cancellation)) networkCancellation = null;
+                var error = probe.Exception?.GetBaseException();
                 if (generation != playbackGeneration) yield break;
-                string contentType = probe.GetResponseHeader("Content-Type");
-                if (probe.result == UnityWebRequest.Result.Success && contentType != null &&
-                    (contentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) ||
-                     contentType.StartsWith("application/xhtml+xml", StringComparison.OrdinalIgnoreCase)))
+                if (error != null || probe.IsCanceled)
+                {
+                    HandlePlaybackError(error?.Message ?? "Network stream classification timed out.");
+                    yield break;
+                }
+                if (probe.Result == NetworkStreamKind.Website)
                 {
                     PlayerSettings.PlayerLinkType = PlayerSettings.LinkType.Youtube;
                     PlayYoutube(url, generation);
                     yield break;
                 }
+                PrepareVlcBackend(url, null, generation, useChunkedInput: false,
+                    isLive: probe.Result == NetworkStreamKind.Live);
             }
-            PrepareVlcBackend(url, null, generation, useChunkedInput: false);
+        }
+
+        private enum NetworkStreamKind { Media, Live, Website }
+
+        private static NetworkStreamKind ProbeNetworkStream(string url, CancellationToken cancellationToken)
+        {
+            const int maxPlaylistBytes = 256 * 1024;
+            var uri = new Uri(url);
+            for (int depth = 0; depth < 4; depth++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var request = (HttpWebRequest)WebRequest.Create(uri);
+                request.Timeout = 10000;
+                request.ReadWriteTimeout = 10000;
+                request.MaximumAutomaticRedirections = 4;
+                request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                using (cancellationToken.Register(request.Abort))
+                using (var response = (HttpWebResponse)request.GetResponse())
+                {
+                    string contentType = response.ContentType ?? "";
+                    if (contentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) ||
+                        contentType.StartsWith("application/xhtml+xml", StringComparison.OrdinalIgnoreCase))
+                        return NetworkStreamKind.Website;
+                    if (response.Headers["icy-metaint"] != null || response.Headers["icy-name"] != null ||
+                        response.Headers["icy-br"] != null)
+                        return NetworkStreamKind.Live;
+
+                    using (var stream = response.GetResponseStream())
+                    {
+                        // Read only the signature for ordinary media, never buffer an open-ended feed.
+                        var prefix = new byte[10];
+                        int count = 0;
+                        while (count < prefix.Length)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            int read = stream.Read(prefix, count, prefix.Length - count);
+                            if (read == 0) break;
+                            count += read;
+                        }
+                        string signature = System.Text.Encoding.UTF8.GetString(prefix, 0, count).TrimStart('\uFEFF');
+                        if (!signature.StartsWith("#EXTM3U", StringComparison.Ordinal))
+                            return NetworkStreamKind.Media;
+
+                        string playlist;
+                        using (var buffer = new MemoryStream())
+                        {
+                            buffer.Write(prefix, 0, count);
+                            var chunk = new byte[4096];
+                            int read;
+                            while ((read = stream.Read(chunk, 0, chunk.Length)) > 0)
+                            {
+                                cancellationToken.ThrowIfCancellationRequested();
+                                if (buffer.Length + read > maxPlaylistBytes)
+                                    throw new InvalidDataException("HLS playlist exceeds the classification limit.");
+                                buffer.Write(chunk, 0, read);
+                            }
+                            playlist = System.Text.Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+                        }
+
+                        bool mediaPlaylist = false;
+                        bool finite = false;
+                        bool variantNext = false;
+                        string variant = null;
+                        string rendition = null;
+                        using (var lines = new StringReader(playlist))
+                        {
+                            string line;
+                            while ((line = lines.ReadLine()) != null)
+                            {
+                                line = line.Trim();
+                                if (line == "#EXT-X-ENDLIST" || line == "#EXT-X-PLAYLIST-TYPE:VOD")
+                                    finite = true;
+                                if (line.StartsWith("#EXT-X-TARGETDURATION:", StringComparison.Ordinal))
+                                    mediaPlaylist = true;
+                                if (line.StartsWith("#EXT-X-STREAM-INF:", StringComparison.Ordinal))
+                                    variantNext = true;
+                                else if (variantNext && line.Length > 0 && line[0] != '#')
+                                {
+                                    if (variant == null) variant = line;
+                                    variantNext = false;
+                                }
+                                else if (rendition == null && line.StartsWith("#EXT-X-MEDIA:", StringComparison.Ordinal))
+                                {
+                                    var match = System.Text.RegularExpressions.Regex.Match(line, "[:,]URI=\"([^\"]+)\"");
+                                    if (match.Success) rendition = match.Groups[1].Value;
+                                }
+                            }
+                        }
+                        if (mediaPlaylist)
+                            return finite ? NetworkStreamKind.Media : NetworkStreamKind.Live;
+                        string child = variant ?? rendition;
+                        if (child == null || !Uri.TryCreate(response.ResponseUri, child, out uri) ||
+                            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                            throw new InvalidDataException("HLS playlist has no supported media variant.");
+                    }
+                }
+            }
+            throw new InvalidDataException("HLS playlist nesting exceeds the classification limit.");
         }
 
         private void UpdateChecks() //1second checks, screen render distance, master volume updates and playlist gui updates

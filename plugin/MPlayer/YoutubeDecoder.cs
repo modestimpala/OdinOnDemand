@@ -132,7 +132,7 @@ namespace OdinOnDemand.MPlayer
             get
             {
                 PlaybackSession current = session;
-                if (current == null)
+                if (current == null || current.IsLive)
                 {
                     return 0d;
                 }
@@ -168,7 +168,7 @@ namespace OdinOnDemand.MPlayer
         /// Live media instead keeps decoding with Unity output gated until Play.
         /// </summary>
         public void Prepare(string videoUrl, string audioUrl, AudioSource output, RenderTexture renderTarget,
-            IDictionary<string, string> headers = null, bool useChunkedInput = true)
+            IDictionary<string, string> headers = null, bool useChunkedInput = true, bool isLive = false)
         {
             if (destroyed)
             {
@@ -185,7 +185,7 @@ namespace OdinOnDemand.MPlayer
                 return;
             }
 
-            pendingPrepare = new PrepareRequest(videoUri, audioUri, output, renderTarget, headers, useChunkedInput);
+            pendingPrepare = new PrepareRequest(videoUri, audioUri, output, renderTarget, headers, useChunkedInput, isLive);
             pendingSeekSeconds = null;
             requestedPlay = false;
             isPrepared = false;
@@ -479,7 +479,7 @@ namespace OdinOnDemand.MPlayer
                             }
                         });
                     });
-                createdSession = new PlaybackSession(this, player, audio, request.TargetTexture != null);
+                createdSession = new PlaybackSession(this, player, audio, request.TargetTexture != null, request.IsLive);
                 createdSession.VideoOutputEnabled = request.UseChunkedInput;
                 createdSession.ConfigureCallbacks();
 
@@ -784,7 +784,7 @@ namespace OdinOnDemand.MPlayer
 
             // Adaptive live inputs can advertise seek/pause despite having no finite timeline.
             // Their client-local clock is not a position that RPC synchronization may seek to.
-            source.Seekable = source.Player.IsSeekable &&
+            source.Seekable = !source.IsLive && source.Player.IsSeekable &&
                 (source.Input != null || source.Player.Length > 0);
             if (source.Preparing)
             {
@@ -1186,7 +1186,7 @@ namespace OdinOnDemand.MPlayer
         private sealed class PrepareRequest
         {
             public PrepareRequest(Uri videoUri, Uri audioUri, AudioSource output,
-                RenderTexture targetTexture, IDictionary<string, string> headers, bool useChunkedInput)
+                RenderTexture targetTexture, IDictionary<string, string> headers, bool useChunkedInput, bool isLive)
             {
                 VideoUri = videoUri;
                 AudioUri = audioUri;
@@ -1194,6 +1194,7 @@ namespace OdinOnDemand.MPlayer
                 TargetTexture = targetTexture;
                 Headers = headers;
                 UseChunkedInput = useChunkedInput;
+                IsLive = isLive;
             }
 
             public Uri VideoUri { get; private set; }
@@ -1202,6 +1203,7 @@ namespace OdinOnDemand.MPlayer
             public RenderTexture TargetTexture { get; private set; }
             public IDictionary<string, string> Headers { get; private set; }
             public bool UseChunkedInput { get; private set; }
+            public bool IsLive { get; private set; }
         }
 
         private sealed class PlaybackSession
@@ -1225,10 +1227,13 @@ namespace OdinOnDemand.MPlayer
                 YoutubeDecoder owner,
                 MediaPlayer player,
                 PcmRingBuffer audio,
-                bool renderVideo)
+                bool renderVideo,
+                bool isLive)
             {
                 this.owner = owner;
                 this.renderVideo = renderVideo;
+                IsLive = isLive;
+                OutputGatedPause = isLive;
                 Player = player;
                 Audio = audio;
                 Preparing = true;
@@ -1245,6 +1250,7 @@ namespace OdinOnDemand.MPlayer
             public PcmRingBuffer Audio { get; private set; }
             public bool Preparing { get; set; }
             public bool PreparePauseRequested { get; set; }
+            public bool IsLive { get; private set; }
             public bool Seekable { get; set; }
             public bool OutputGatedPause { get; set; }
             public volatile bool VideoOutputEnabled;
