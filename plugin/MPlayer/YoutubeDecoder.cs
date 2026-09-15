@@ -148,6 +148,22 @@ namespace OdinOnDemand.MPlayer
         }
 
         /// <summary>
+        ///     True once LibVLC has negotiated a video format, which only happens for media that
+        ///     carries video. Audio-only sources - internet radio, audio_only live streams - stay
+        ///     false, so the player can show its radio panel and waveform instead of a blank
+        ///     screen. Deliberately a cached flag: libvlc_video_get_track_count takes the input
+        ///     thread's lock and can stall the caller while a live input is still starting.
+        /// </summary>
+        public bool HasVideoTrack
+        {
+            get
+            {
+                PlaybackSession current = session;
+                return current != null && current.VideoFormatSeen;
+            }
+        }
+
+        /// <summary>
         /// Begins opening the streams. Seekable, pausable media prepares by playing then pausing.
         /// Live media instead keeps decoding with Unity output gated until Play.
         /// </summary>
@@ -1232,6 +1248,9 @@ namespace OdinOnDemand.MPlayer
             public bool Seekable { get; set; }
             public bool OutputGatedPause { get; set; }
             public volatile bool VideoOutputEnabled;
+
+            /// <summary>Set once LibVLC negotiates a video format, proving a video track exists.</summary>
+            public volatile bool VideoFormatSeen;
             public volatile bool NativePlaying;
             public volatile bool IsBuffering;
             public readonly int DiagnosticId = Interlocked.Increment(ref nextDiagnosticId);
@@ -1501,6 +1520,7 @@ namespace OdinOnDemand.MPlayer
                             previous.DisposeNative();
                         }
                     }
+                    VideoFormatSeen = true;
                     return 1;
                 }
                 catch

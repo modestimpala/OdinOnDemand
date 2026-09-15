@@ -49,7 +49,7 @@ If you are enjoying the mod, please consider donating to my Ko-Fi.
   - Cart - "Bard's Wagon",  buildable. Used by pointing and clicking with remote control.
   - Belt - "Skald's Girdle", purchased from Haldor, with configurable recipe. Used by equipping & using remote control when pointing at empty space, e.g. not at a mediaplayer. Admins can point and click at other user's Belt and open it's menu.
 - YouTube playlist support
-- Online radio streams and Twitch channels (Twitch requires optional Streamlink on each client).
+- Online radio streams and Twitch/Kick channels (live channels require optional Streamlink on each client).
 - Wide website support: Vimeo, TikTok, Dailymotion, Facebook, Instagram, Twitter, reddit, etc. Just try your site of choice and it may return a valid file.
 - Unique dynamic radio stations system with easy radio addon support 
 - New Music Waveform Visualizer 
@@ -76,19 +76,19 @@ YouTube playback uses yt-dlp (single videos), YoutubeExplode (playlists), and VL
 
 High-quality playback requires the packaged **LibVLCSharp 3.10.1**, **LibVLC 3.0.23**, and complete `libvlc/win-x64/` directory beside `OdinOnDemand.dll` on every client. Copying only the plugin DLL is not enough. 
 
-### Online radio and Twitch
+### Online radio, Twitch and Kick
 
 Paste the URL into any player's normal URL field:
 
-- **Radio:** a direct HTTP(S) station stream, for example `https://caster04.streampakket.com/proxy/8982/CeltCast`. VLC streams the audio without downloading the entire broadcast; no filename extension, yt-dlp, or Streamlink is required.
-- **Twitch:** a channel URL such as `https://www.twitch.tv/barny`. Install [Streamlink](https://streamlink.github.io/install.html) on each listening/watching client. The cog menu shows whether it was detected. Streamlink resolves the channel, then the packaged VLC runtime plays its HLS stream; no external player is opened.
-  - **Windows:** put `streamlink.exe` on `PATH`, beside `OdinOnDemand.dll`, or in the game directory. Restart the game after changing `PATH`.
+- **Radio:** a direct HTTP(S) station stream, for example `https://caster04.streampakket.com/proxy/8982/CeltCast`. VLC streams the audio without downloading the entire broadcast; no filename extension, yt-dlp, or Streamlink is required. Audio-only streams show the radio panel and music waveform visualizer instead of a blank screen, like local audio files.
+- **Twitch and Kick:** a channel URL such as `https://www.twitch.tv/barny` or `https://kick.com/absi`. The `https://` is optional for these two, so `kick.com/absi` also works. Install [Streamlink](https://streamlink.github.io/install.html) on each listening/watching client. The cog menu shows whether it was detected. Streamlink resolves the channel, then the packaged VLC runtime plays its HLS stream; no external player is opened.
+  - **Windows:** put `streamlink.exe` on `PATH`, beside `OdinOnDemand.dll`, or in the game directory. OOD also reads the machine and user `PATH` from the registry, so a `PATH` entry added after Steam started is still found; reopen the cog menu to re-probe.
   - **Wine/Proton:** a Windows Streamlink installation also works. Alternatively, OOD detects Linux Streamlink in `/usr/bin`, `/usr/local/bin`, or `$HOME/.local/bin`, with host Python 3 at `/usr/bin/python3` or `/bin/python3`. It invokes a short-lived host bridge using Wine's `start /unix`; you do not need to add Linux paths to Windows `PATH`. Custom Linux install locations outside these directories are not detected.
-  - **Max Quality** also caps Twitch resolution. If no video fits, an available audio-only stream is used. Offline/restricted channels and missing Streamlink produce an error; radio and YouTube remain independent of Streamlink.
+  - **Max Quality** also caps live-channel resolution. If no video fits, an available audio-only stream is used. Offline/restricted channels and missing Streamlink produce an error; radio and YouTube remain independent of Streamlink.
 
 Live broadcasts have no shared seekable position. Pause mutes/freezes this player's output while the stream continues; resume rejoins the live feed. Each multiplayer client resolves the original channel/station URL locally, so live latency can differ between clients. Ordinary finite media retains seek/time synchronization.
 
-Keep the complete updated `libvlc/win-x64` folder: Twitch needs the packaged adaptive HLS and MPEG-TS modules, not just an updated plugin DLL.
+Keep the complete updated `libvlc/win-x64` folder: live channels need the packaged adaptive HLS and MPEG-TS modules, not just an updated plugin DLL.
 
 ## Use
 
@@ -113,6 +113,9 @@ You can bundle video files with your modpacks or instruct Vikings to place files
 
 #### Youtube Playlists
 Mediaplayers have support for Youtube playlists. When a playlist is set, new info will appear in the UI. The Viking who initially sets the playlist handles playlist logic, so if they leave the area or disconnect playlist playback will stop. It is multiplayer synced. Do not skip through tracks too fast. You can choose to shuffle or loop the playlist. If looping, the whole playlist will loop - not individual videos. The last video played will be saved as the autoplay video.
+
+#### Now Playing
+When no playlist is running, the two playlist text rows show the current media instead: its title on the first row and `elapsed / total` on the second, or `LIVE <elapsed>` for radio and Twitch/Kick streams that have no end point. Titles come from yt-dlp for YouTube, SoundCloud for tracks, the channel slug for live URLs, and the file or mount name otherwise; long titles are truncated.
 
 #### Time Sync
 Mediaplayers will regularly send out requests to sync time with current mediaplayer (ZDO) owner. You can configure the time between requests sent in the Config file.

@@ -22,25 +22,40 @@ namespace OdinOnDemand.Utils.Net.Explode
         /// </summary>
         public IDictionary<string, string> Headers { get; }
 
+        /// <summary>Video title reported by yt-dlp, or null when the extraction omitted it.</summary>
+        public string Title { get; }
+
         public YoutubeStreams(string videoUrl, string audioUrl = null,
-            IDictionary<string, string> headers = null)
+            IDictionary<string, string> headers = null, string title = null)
         {
             VideoUrl = videoUrl;
             AudioUrl = audioUrl;
             Headers = headers ?? new Dictionary<string, string>();
+            Title = string.IsNullOrEmpty(title) ? null : title;
         }
     }
 
     public class DLSharp : MonoBehaviour
     {
         private const int DefaultTimeoutSeconds = 120;
+        private const string NightlyChannel = "nightly";
+        private const string StableChannel = "stable";
         private static readonly string YtDlpPath = Path.Combine(BepInEx.Paths.GameRootPath, "yt-dlp.exe");
-        private YoutubeDL Ytdl { get; set; }
-        private OptionSet UpdateOptions { get; } = new OptionSet
+
+        // Extraction profiles, in the order they are tried. yt-dlp's default clients hand out
+        // directly playable URLs. web_embedded is a fallback only: YouTube binds its format URLs
+        // to a GVS PO token that yt-dlp cannot mint here, so googlevideo answers 403 on the first
+        // range request - but it still resolves videos the default clients cannot.
+        // A null profile means "pass no --extractor-args at all": assigning null to an OptionSet
+        // property still emits the bare switch, which then swallows the next argument.
+        private static readonly string[] ExtractorProfiles =
         {
-            Update = true,
-            NoPostOverwrites = true
+            null,
+            "youtube:player_client=default,web_embedded"
         };
+
+        private YoutubeDL Ytdl { get; set; }
+        private string appliedUpdateChannel;
 
         internal static YoutubeStreams ParseStreams(string output)
         {
@@ -64,7 +79,8 @@ namespace OdinOnDemand.Utils.Net.Explode
                         audioUrl = url;
                 }
                 if (IsStreamUrl(videoUrl) && IsStreamUrl(audioUrl))
-                    return new YoutubeStreams(videoUrl, audioUrl, ParseHeaders(videoFormat, json));
+                    return new YoutubeStreams(videoUrl, audioUrl, ParseHeaders(videoFormat, json),
+                        (string)json["title"]);
             }
             else
             {
@@ -73,7 +89,7 @@ namespace OdinOnDemand.Utils.Net.Explode
                 var audioCodec = (string)json["acodec"];
                 if (IsStreamUrl(url) && !string.IsNullOrEmpty(videoCodec) && videoCodec != "none" &&
                     !string.IsNullOrEmpty(audioCodec) && audioCodec != "none")
-                    return new YoutubeStreams(url, null, ParseHeaders(json, json));
+                    return new YoutubeStreams(url, null, ParseHeaders(json, json), (string)json["title"]);
             }
             throw new FormatException("yt-dlp did not return a complete video/audio stream selection.");
         }
@@ -125,21 +141,47 @@ namespace OdinOnDemand.Utils.Net.Explode
 
             Ytdl = new YoutubeDL { YoutubeDLPath = YtDlpPath };
             ExternalJsRuntime.Refresh();
-            UpdateOptions.UpdateTo = OODConfig.UseNightlyYtDlp.Value ? "nightly" : null;
-            // Updating is best-effort; extraction also applies the selected nightly channel.
-            var update = Ytdl.RunWithOptions(Array.Empty<string>(), UpdateOptions, CancellationToken.None);
-            float updateElapsed = 0;
-            while (!update.IsCompleted && updateElapsed < timeoutSeconds)
-            {
-                updateElapsed += Time.deltaTime;
-                yield return null;
-            }
-            if (update.IsFaulted)
-                Jotunn.Logger.LogWarning($"yt-dlp update failed: {update.Exception.GetBaseException().Message}");
+            yield return ApplyUpdateChannel(timeoutSeconds);
             onComplete?.Invoke(true);
         }
 
-        public IEnumerator GetStreams(string url, Action<YoutubeStreams> onComplete, int timeoutSeconds = DefaultTimeoutSeconds)
+        /// <summary>
+        ///     Updates yt-dlp when the configured release channel is not the one already applied.
+        ///     Requesting it per extraction would fetch the update spec before every playback,
+        ///     which costs a round trip and fails loudly when GitHub is unavailable.
+        /// </summary>
+        private IEnumerator ApplyUpdateChannel(int timeoutSeconds)
+        {
+            var channel = OODConfig.UseNightlyYtDlp.Value ? NightlyChannel : StableChannel;
+            if (appliedUpdateChannel == channel) yield break;
+
+            appliedUpdateChannel = channel;
+            // Only nightly names a channel: plain --update keeps the current channel, while
+            // --update-to stable would downgrade a user who had nightly enabled earlier.
+            var options = new OptionSet { Update = true, NoPostOverwrites = true };
+            if (channel == NightlyChannel) options.UpdateTo = NightlyChannel;
+            var update = Ytdl.RunWithOptions(Array.Empty<string>(), options, CancellationToken.None);
+            float elapsed = 0;
+            while (!update.IsCompleted && elapsed < timeoutSeconds)
+            {
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            // Updating is best-effort, but a failure should be retried on the next playback.
+            if (!update.IsCompleted)
+            {
+                appliedUpdateChannel = null;
+                Jotunn.Logger.LogWarning($"yt-dlp update timed out after {timeoutSeconds} seconds.");
+            }
+            else if (update.IsFaulted)
+            {
+                appliedUpdateChannel = null;
+                Jotunn.Logger.LogWarning($"yt-dlp update failed: {update.Exception.GetBaseException().Message}");
+            }
+        }
+
+        public IEnumerator GetStreams(string url, Action<YoutubeStreams> onComplete,
+            int timeoutSeconds = DefaultTimeoutSeconds, string extractorArgs = null)
         {
             if (Ytdl == null)
             {
@@ -152,6 +194,8 @@ namespace OdinOnDemand.Utils.Net.Explode
                 }
             }
 
+            yield return ApplyUpdateChannel(timeoutSeconds);
+
             using var cts = new CancellationTokenSource();
             // Software decoding and the per-frame CPU upload scale with resolution, so the height
             // cap is the difference between smooth playback and a stalled game.
@@ -160,15 +204,14 @@ namespace OdinOnDemand.Utils.Net.Explode
             // Keep selection request-local: a reload can overlap an older extraction.
             var options = new OptionSet
             {
-                ExtractorArgs = "youtube:player_client=default,web_embedded",
                 Format =
                     $"bestvideo[ext=mp4][vcodec^=avc1][protocol=https]{heightFilter}+bestaudio[ext=m4a][acodec^=mp4a][protocol=https]/" +
                     $"best[ext=mp4][vcodec^=avc1][acodec^=mp4a][protocol=https]{heightFilter}/" +
                     "bestvideo[ext=mp4][vcodec^=avc1][protocol=https]+bestaudio[ext=m4a][acodec^=mp4a][protocol=https]",
                 DumpSingleJson = true,
-                NoPlaylist = true,
-                UpdateTo = OODConfig.UseNightlyYtDlp.Value ? "nightly" : null
+                NoPlaylist = true
             };
+            if (extractorArgs != null) options.ExtractorArgs = extractorArgs;
             // Only deno is enabled by default; point yt-dlp at any other runtime we located.
             var jsRuntimes = ExternalJsRuntime.JsRuntimesArgument;
             if (jsRuntimes != null) options.AddCustomOption("--js-runtimes", jsRuntimes);
@@ -213,10 +256,14 @@ namespace OdinOnDemand.Utils.Net.Explode
 
         public IEnumerator GetStreamsWithRetry(string url, Action<YoutubeStreams> onComplete, int maxRetries = 3, int timeoutSeconds = DefaultTimeoutSeconds)
         {
-            for (int i = 0; i < maxRetries; i++)
+            for (var i = 0; i < maxRetries; i++)
             {
+                var extractorArgs = ExtractorProfiles[Math.Min(i, ExtractorProfiles.Length - 1)];
+                if (i == 1 && extractorArgs != null)
+                    Jotunn.Logger.LogInfo("Retrying YouTube extraction with the web_embedded client; " +
+                                          "its stream URLs need a PO token and can be rejected with 403.");
                 YoutubeStreams result = null;
-                yield return GetStreams(url, streams => result = streams, timeoutSeconds);
+                yield return GetStreams(url, streams => result = streams, timeoutSeconds, extractorArgs);
                 if (result != null)
                 {
                     onComplete?.Invoke(result);

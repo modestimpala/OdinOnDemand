@@ -3,10 +3,20 @@
 
 ### Versions:
 
+## 1.2.5
+ - Added online radio playback through VLC with support for station URLs without file extensions; HTML website links are handled by extractors. With waveform support. Thanks isimp for the suggestion. 
+ - Added optional Streamlink detection, adding in full support for Twitch and Kick playback!
+ - Added a second YouTube format for fallback. 
+ - Fixed external runtimes not being detected when they were added to `PATH` after Steam started.
+ - Sped up YouTube loading by no longer checking for a yt-dlp update before every video. It now checks once per session, or per setting change. 
+ - Changed LibVLC/VLC audio decoder from "ugly" to "speex": 
+  - Fixed YouTube audio drifting out of sync or cutting out during long playback.
+  - Fixed gradual audio desync on 44.1 kHz sources.
+ - Added an optional **Decoder Audio Stats** setting that logs audio diagnostics for bug reports.
+ - Added a now-playing readout to the player panel: title with elapsed/total time, or `LIVE` for endless streams.
+ - Made the player panel taller so the info rows clear the Loop button, and errors now stay readable for 8 seconds.
+
 ## 1.2.0
- - Added direct HTTP(S) online radio playback through VLC, including extensionless station URLs; HTML website links retain extractor routing.
- - Added optional Streamlink detection and Twitch HLS playback, including Windows PATH and Linux-host Streamlink through Wine/Proton, with cog-menu status and Max Quality support.
- - Added native HLS/MPEG-TS modules, output-gated live pause/resume, and nonseekable live synchronization handling; cancelled channel resolutions cannot restart a stopped or replaced source.
  - Updated interfaces, equipment hashes, and Harmony placement support for Valheim 1.0; restored the **OdinOnDemand** build-menu group using usage tags.
  - Added cog settings for **Max Quality** (360p-2160p, default 1080p) and persisted **Use Nightly yt-dlp**, plus a fixed-height, scrollable settings layout.
  - Added **External JS** runtime status, setup guidance, yt-dlp warnings, and `--js-runtimes` support for node, bun, and qjs.
@@ -14,9 +24,6 @@
  - Added packaged Windows x64 LibVLC streaming for separate video/audio, including Proton, without full downloads or remuxing.
  - Shared one LibVLC instance across players and trimmed packaged modules to those needed for playback; replace the entire `libvlc` folder when updating.
  - Improved Unity video/audio output, fixing a native buffer over-read and playback timing issues.
- - Preserved YouTube audio continuity across streaming-clip loops and packet timestamp jitter, while retaining resynchronization after underruns, flushes, and large clock jumps.
- - Explicitly selected the packaged Speex audio resampler to prevent fractional-frame truncation, accumulated 44.1-to-48 kHz timestamp drift, and periodic PCM queue resets.
- - Added opt-in client-side **Decoder Audio Stats** with periodic URL-free VLC/Unity PCM counters, underrun/drop/reset causes, and playback-session IDs.
  - Unified playback, seeking, looping, playlists, and source changes around the decoder clock, preventing stale extraction results from restarting stopped players.
  - Fixed RPC pause/position synchronization while preserving artwork, gramophone animations, station timers, and direct extensionless URLs.
  - Migrated YoutubeExplode from System.Text.Json to Newtonsoft.Json.

@@ -68,7 +68,7 @@ namespace OdinOnDemand.Utils.Net.Explode
         }
         
 
-        public IEnumerator GetSoundcloudExplodeCoroutine(Uri url, Action<Uri, Uri> callback)
+        public IEnumerator GetSoundcloudExplodeCoroutine(Uri url, Action<Uri, Uri, string> callback)
         {
             var urlString = url.AbsoluteUri;
             LoadingBool = true;
@@ -95,7 +95,7 @@ namespace OdinOnDemand.Utils.Net.Explode
                 Logger.LogError("Failed to get download URL, check for exceptions");
                 LoadingBool = false;
                 FailBool = true;
-                callback(null, null);
+                callback(null, null, null);
                 yield break;
             }
             
@@ -109,14 +109,14 @@ namespace OdinOnDemand.Utils.Net.Explode
                 Logger.LogError("Failed to get download URL, check for exceptions");
                 LoadingBool = false;
                 FailBool = true;
-                callback(null, null);
+                callback(null, null, null);
                 yield break;
             }
             var soundCloudUri = CleanUrl(soundCloudUrl);
             var soundCloudArt = soundCloudTrack.ArtworkUrl;
             // Process the result if no exception was caught.
             LoadingBool = false;
-            callback(soundCloudUri, soundCloudArt);
+            callback(soundCloudUri, soundCloudArt, soundCloudTrack.Title);
         }
         
         public IEnumerator GetYouTubePlaylistCoroutine(string url, Action<List<VideoInfo>> callback)

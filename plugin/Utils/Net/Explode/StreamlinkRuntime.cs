@@ -12,7 +12,7 @@ using Logger = Jotunn.Logger;
 
 namespace OdinOnDemand.Utils.Net.Explode
 {
-    /// <summary>Optional Twitch URL extraction; Streamlink never launches a player.</summary>
+    /// <summary>Optional live-channel URL extraction; Streamlink never launches a player.</summary>
     internal static class StreamlinkRuntime
     {
         private const int TimeoutSeconds = 45;
@@ -31,20 +31,63 @@ namespace OdinOnDemand.Utils.Net.Explode
         public static bool Detected => _runtime != null;
         public static string RuntimePath => _runtime?.Path;
 
-        public static bool IsTwitchUrl(Uri uri)
+        /// <summary>
+        ///     Live services routed through Streamlink, by registrable domain. Streamlink ships
+        ///     plugins for many more, but these are the two the mod names and documents; yt-dlp
+        ///     already covers the long tail of on-demand sites.
+        /// </summary>
+        private static readonly KeyValuePair<string, string>[] Services =
         {
-            return uri != null && uri.IsAbsoluteUri &&
-                   (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
-                   (uri.Host.Equals("twitch.tv", StringComparison.OrdinalIgnoreCase) ||
-                    uri.Host.EndsWith(".twitch.tv", StringComparison.OrdinalIgnoreCase));
+            new KeyValuePair<string, string>("twitch.tv", "Twitch"),
+            new KeyValuePair<string, string>("kick.com", "Kick")
+        };
+
+        /// <summary>Display name of the live service a URL belongs to, or null.</summary>
+        public static string ServiceName(Uri uri)
+        {
+            if (uri == null || !uri.IsAbsoluteUri ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                return null;
+
+            foreach (var service in Services)
+                if (uri.Host.Equals(service.Key, StringComparison.OrdinalIgnoreCase) ||
+                    uri.Host.EndsWith("." + service.Key, StringComparison.OrdinalIgnoreCase))
+                    return service.Value;
+
+            return null;
+        }
+
+        public static bool IsLiveChannelUrl(Uri uri)
+        {
+            return ServiceName(uri) != null;
+        }
+
+        /// <summary>
+        ///     Promotes a bare live-channel address such as "twitch.tv/xyz" to https. Only the
+        ///     live services are promoted: they are the URLs people type by hand, while every
+        ///     other form - local paths, local:// media, full URLs - is returned untouched.
+        /// </summary>
+        public static string NormalizeChannelUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return url;
+
+            var trimmed = url.Trim();
+            if (trimmed.Length == 0 || trimmed.IndexOf("://", StringComparison.Ordinal) >= 0) return url;
+
+            var candidate = "https://" + trimmed;
+            return Uri.TryCreate(candidate, UriKind.Absolute, out var uri) && ServiceName(uri) != null
+                ? candidate
+                : url;
         }
 
         public static void Refresh()
         {
             Runtime found = null;
-            foreach (var root in SearchRoots())
+            foreach (var root in ExecutableSearch.Directories(
+                         Path.GetDirectoryName(typeof(StreamlinkRuntime).Assembly.Location),
+                         BepInEx.Paths.GameRootPath))
             {
-                var path = FindFile(root, IsWindows ? "streamlink.exe" : "streamlink");
+                var path = ExecutableSearch.Find(root, "streamlink");
                 if (path == null) continue;
                 found = new Runtime { Path = path };
                 break;
@@ -77,16 +120,18 @@ namespace OdinOnDemand.Utils.Net.Explode
         public static async Task<string> ResolveAsync(string url, int maxHeight, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !IsTwitchUrl(uri) ||
-                !string.IsNullOrEmpty(uri.UserInfo) || url.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
-                throw new ArgumentException("Streamlink requires an HTTP(S) twitch.tv URL without credentials.", nameof(url));
+            var service = Uri.TryCreate(url, UriKind.Absolute, out var uri) ? ServiceName(uri) : null;
+            if (service == null || !string.IsNullOrEmpty(uri.UserInfo) ||
+                url.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+                throw new ArgumentException("Streamlink requires an HTTP(S) Twitch or Kick URL without credentials.",
+                    nameof(url));
             if (maxHeight <= 0) throw new ArgumentOutOfRangeException(nameof(maxHeight));
 
             Refresh();
             var runtime = _runtime;
             if (runtime == null)
-                throw new InvalidOperationException("Twitch needs Streamlink. Install streamlink.exe on Windows PATH " +
-                    "or beside OdinOnDemand.dll. Under Wine/Proton, install Linux Streamlink in /usr/bin, " +
+                throw new InvalidOperationException(service + " needs Streamlink. Install streamlink.exe on Windows " +
+                    "PATH or beside OdinOnDemand.dll. Under Wine/Proton, install Linux Streamlink in /usr/bin, " +
                     "/usr/local/bin or ~/.local/bin and Python 3 in /usr/bin/python3.");
 
             // The next integer height admits e.g. 720p60 while excluding all 721p+ video.
@@ -102,9 +147,10 @@ namespace OdinOnDemand.Utils.Net.Explode
                 : await ResolveHostAsync(runtime, arguments, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
             if (result.ExitCode != 0)
-                throw new InvalidOperationException("Streamlink could not resolve Twitch (exit " + result.ExitCode +
-                    "). The channel may be offline, restricted, or have no stream within the height cap. " +
-                    "Update Streamlink if Twitch extraction has changed. " + ErrorDetail(result.Error, result.Output));
+                throw new InvalidOperationException("Streamlink could not resolve " + service + " (exit " +
+                    result.ExitCode + "). The channel may be offline, restricted, or have no stream within the " +
+                    "height cap. Update Streamlink if " + service + " extraction has changed. " +
+                    ErrorDetail(result.Error, result.Output));
 
             // Validate, but return the original text: Uri.AbsoluteUri can rewrite signed query escaping.
             var streamUrl = result.Output.TrimEnd('\r', '\n');
@@ -113,7 +159,8 @@ namespace OdinOnDemand.Utils.Net.Explode
                 (streamUri.Scheme != Uri.UriSchemeHttp && streamUri.Scheme != Uri.UriSchemeHttps) ||
                 string.IsNullOrEmpty(streamUri.Host) || !string.IsNullOrEmpty(streamUri.UserInfo))
                 throw new InvalidOperationException("Streamlink did not return a single HTTP(S) stream URL. " +
-                                                    "Update Streamlink and check that the Twitch channel is live.");
+                                                    "Update Streamlink and check that the " + service +
+                                                    " channel is live.");
             return streamUrl;
         }
 
@@ -142,7 +189,7 @@ namespace OdinOnDemand.Utils.Net.Explode
                     {
                         token.ThrowIfCancellationRequested();
                         if (clock.Elapsed.TotalSeconds >= TimeoutSeconds)
-                            throw new TimeoutException("Streamlink timed out after 45 seconds. Check connectivity and whether the Twitch channel is live.");
+                            throw new TimeoutException("Streamlink timed out after 45 seconds. Check connectivity and whether the channel is live.");
                         await Task.Delay(50, token).ConfigureAwait(false);
                     }
                     return new Result
@@ -210,7 +257,7 @@ namespace OdinOnDemand.Utils.Net.Explode
                     await Task.Delay(100, token).ConfigureAwait(false);
                 }
                 var status = File.ReadAllText(done, Utf8);
-                if (status == "timeout") throw new TimeoutException("Linux Streamlink timed out after 45 seconds. Check Twitch connectivity.");
+                if (status == "timeout") throw new TimeoutException("Linux Streamlink timed out after 45 seconds. Check connectivity to the streaming service.");
                 if (status == "cancelled") throw new OperationCanceledException(token);
                 if (!int.TryParse(status, NumberStyles.Integer, CultureInfo.InvariantCulture, out var code))
                     throw new InvalidOperationException("Linux Streamlink bridge failed: " + ReadOutput(directory, "stderr"));
@@ -378,14 +425,6 @@ finally:
             return text.Length <= 1000 ? text : text.Substring(0, 1000);
         }
 
-        private static IEnumerable<string> SearchRoots()
-        {
-            yield return Path.GetDirectoryName(typeof(StreamlinkRuntime).Assembly.Location);
-            yield return BepInEx.Paths.GameRootPath;
-            foreach (var entry in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator))
-                if (!string.IsNullOrWhiteSpace(entry)) yield return entry.Trim().Trim('"');
-        }
-
         private static IEnumerable<string> HostSearchRoots()
         {
             yield return "/usr/bin";
@@ -393,19 +432,6 @@ finally:
             var home = Environment.GetEnvironmentVariable("HOME");
             if (!string.IsNullOrEmpty(home) && home.StartsWith("/", StringComparison.Ordinal))
                 yield return home.TrimEnd('/') + "/.local/bin";
-        }
-
-        private static string FindFile(string root, string name)
-        {
-            if (string.IsNullOrEmpty(root)) return null;
-            try
-            {
-                var path = Path.GetFullPath(Path.Combine(root, name));
-                return File.Exists(path) ? path : null;
-            }
-            catch (ArgumentException) { return null; }
-            catch (NotSupportedException) { return null; }
-            catch (IOException) { return null; }
         }
 
         private static string FindHostFile(string unixPath)

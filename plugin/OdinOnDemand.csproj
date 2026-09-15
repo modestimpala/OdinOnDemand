@@ -74,6 +74,7 @@
         <Compile Include="Utils\Net\ComponentLists.cs" />
         <Compile Include="Utils\Net\Explode\Async.cs" />
         <Compile Include="Utils\Net\Explode\DLSharp.cs" />
+        <Compile Include="Utils\Net\Explode\ExecutableSearch.cs" />
         <Compile Include="Utils\Net\Explode\ExternalJsRuntime.cs" />
         <Compile Include="Utils\Net\Explode\StreamlinkRuntime.cs" />
         <Compile Include="Utils\Net\Explode\UrlGrab.cs" />
