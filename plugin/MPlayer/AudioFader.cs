@@ -1,5 +1,4 @@
-﻿using OdinOnDemand.Components;
-using OdinOnDemand.MPlayer;
+﻿using OdinOnDemand.MPlayer;
 using OdinOnDemand.Utils.Config;
 using OdinOnDemand.Utils.Net;
 using UnityEngine;
@@ -7,10 +6,18 @@ using UnityEngine;
 
 namespace OdinOnDemand.Utils
 {
+    /// <summary>
+    ///     Ducks the game's music near an active media player. MusicMan rewrites its source volume
+    ///     every frame from the track volume and the player's music setting, so the fade scales
+    ///     that result in LateUpdate and never touches MusicMan's own fields.
+    /// </summary>
     public class AudioFader : MonoBehaviour
     {
         public static AudioFader Instance { get; set; }
-        private static MusicMan _musicMan;
+
+        private AudioSource musicSource;
+        private float unfadedVolume;
+        private float appliedVolume = -1f;
 
         private void Awake()
         {
@@ -24,39 +31,45 @@ namespace OdinOnDemand.Utils
             }
         }
 
-        public AudioFader()
+        private void OnDestroy()
         {
-            _musicMan = MusicMan.m_instance;
+            if (Instance == this) Instance = null;
         }
 
-        public void Update()
+        private void LateUpdate()
         {
-            if (OODConfig.AudioFadeType.Value == OODConfig.FadeType.Fade)
+            var musicMan = MusicMan.instance;
+            var source = musicMan ? musicMan.m_musicSource : null;
+            if (source != musicSource)
             {
-                FadeGameMusic();
+                musicSource = source;
+                appliedVolume = -1f;
             }
+            if (!source) return;
+
+            // MusicMan skips its volume write on some frames (nothing queued, between tracks).
+            // Scaling our own output again would keep lowering the music on each of those frames.
+            var volume = source.volume;
+            if (!Mathf.Approximately(volume, appliedVolume)) unfadedVolume = volume;
+
+            var gain = OODConfig.AudioFadeType.Value == OODConfig.FadeType.Fade ? FadeGain() : 1f;
+            appliedVolume = unfadedVolume * gain;
+            source.volume = appliedVolume;
         }
 
-        public void FadeGameMusic()
+        /// <summary>Linear gain between the configured floor at the player and 1 at the fade edge.</summary>
+        private static float FadeGain()
         {
             var (distance, closestMediaPlayer) = GetDistanceFromMediaplayers();
-            if (!closestMediaPlayer)
-            {
-                _musicMan.m_musicVolume = PlayerPrefs.GetFloat("MusicVolume", 1f);
-                return;
-            }
+            if (!closestMediaPlayer) return 1f;
             var maxDistance = closestMediaPlayer.mAudio.maxDistance / 1.35f;
-            if(distance > maxDistance)
-            {
-                _musicMan.m_musicVolume = PlayerPrefs.GetFloat("MusicVolume", 1f);
-                return;
-            }
-            float normalizedDistance = Mathf.Clamp01(distance / maxDistance);
-            float currentVolumeDb = 20 * Mathf.Log10(_musicMan.m_musicSource.volume);
-            float volumeDb = Mathf.Lerp(OODConfig.LowestVolumeDB.Value, currentVolumeDb, normalizedDistance);
-            _musicMan.m_musicSource.volume = Mathf.Pow(10.0f, volumeDb / 20.0f);
+            if (maxDistance <= 0f || distance > maxDistance) return 1f;
+
+            var normalizedDistance = Mathf.Clamp01(distance / maxDistance);
+            var gainDb = Mathf.Lerp(OODConfig.LowestVolumeDB.Value, 0f, normalizedDistance);
+            return Mathf.Pow(10.0f, gainDb / 20.0f);
         }
-        
+
         private static (float, BasePlayer) GetDistanceFromMediaplayers()
         {
             if (!Player.m_localPlayer)
@@ -72,7 +85,7 @@ namespace OdinOnDemand.Utils
             {
                 foreach (BasePlayer component in kvp.Value)
                 {
-                    if(!component) continue;
+                    if(!component || !component.mAudio) continue;
                     if (!component.mAudio.isPlaying && (!component.mAudio.clip || component.mAudio.time == 0f) && !component.mAudio.loop)
                     {
                         continue;

@@ -453,7 +453,7 @@ namespace OdinOnDemand.MPlayer
                 }
 
                 player = new MediaPlayer(libVlc);
-                player.NetworkCaching = 1000;
+                player.NetworkCaching = (uint)OODConfig.StreamBufferMs.Value;
 
                 int dspBufferLength;
                 int dspBufferCount;

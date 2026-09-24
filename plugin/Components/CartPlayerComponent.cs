@@ -36,9 +36,12 @@ namespace OdinOnDemand.Components
             if (mPiece.IsPlacedByPlayer()) LoadZDO(); // If the player is placed by a player, load the zdo data to init
         }
         
+        // Every change is saved as it happens. Saving the whole state here let any client that
+        // walked away overwrite the shared ZDO (speakers it had not loaded, stale play state) and
+        // pulled ownership to that client.
         public void OnDisable()
         {
-            SaveZDO();
+            SaveTimeOnUnload();
         }
 
         private void SetupCartPlayer()

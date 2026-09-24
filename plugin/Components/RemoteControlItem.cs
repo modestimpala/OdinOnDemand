@@ -174,10 +174,18 @@ namespace OdinOnDemand.Components
 
         private void CheckUtilityItem()
         {
-            if (localPlayer.m_utilityItem == null) return;
-            if (!localPlayer.m_utilityItem.m_shared.m_name.Contains("skaldsgirdle")) return;
-            
-            localPlayer.GetComponentInChildren<BeltPlayerComponent>().UIController.ToggleMainPanel();
+            var utilityItem = localPlayer.m_utilityItem;
+            if (utilityItem?.m_shared == null || !utilityItem.m_shared.m_name.Contains("skaldsgirdle")) return;
+
+            // The girdle's player lives on its visual attachment, which can be missing or inactive
+            // (hidden equipment, other slot mods) even while the item is equipped.
+            var belt = localPlayer.GetComponentInChildren<BeltPlayerComponent>(true);
+            if (belt == null || belt.UIController == null)
+            {
+                MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, "Skald's Girdle is not ready");
+                return;
+            }
+            belt.UIController.ToggleMainPanel();
         }
     }
 }

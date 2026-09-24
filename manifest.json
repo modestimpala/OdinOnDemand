@@ -1,0 +1,11 @@
+{
+    "name": "OdinOnDemand",
+    "version_number": "1.2.6",
+    "website_url": "https://github.com/modestimpala/OdinOnDemand",
+    "description": "Step into Valheim's ultimate media experience with OdinOnDemand - Cinema screens and music players at your command! Watch YouTube, Twitch and movies, listen to music and more all with your friends!",
+    "dependencies": [
+        "ValheimModding-Jotunn-2.30.2",
+	    "ValMedia-OOD_LIB-1.2.0",
+        "ValheimModding-JsonDotNET-13.0.4"
+    ]
+}

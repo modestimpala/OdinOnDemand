@@ -74,9 +74,12 @@ namespace OdinOnDemand.Components
             if (mPiece.IsPlacedByPlayer()) LoadZDO(); // If the player is placed by a player, load the zdo data to init
         }
 
+        // Every change is saved as it happens. Saving the whole state here let any client that
+        // walked away overwrite the shared ZDO (speakers it had not loaded, stale play state) and
+        // pulled ownership to that client.
         public void OnDisable()
         {
-            SaveZDO();
+            SaveTimeOnUnload();
         }
 
         private new void OnDestroy()
@@ -185,20 +188,33 @@ namespace OdinOnDemand.Components
       
     }
     
+    /// <summary>A saved receiver-to-speaker link: the speaker's guid and where it stood when linked.</summary>
+    public readonly struct SpeakerLink
+    {
+        public readonly string Guid;
+        public readonly Vector3 Position;
+
+        public SpeakerLink(string guid, Vector3 position)
+        {
+            Guid = guid ?? "";
+            Position = position;
+        }
+    }
+
     public class SpeakerHelper
     {
-        public static Vector3 CalculateAudioCenter(List<SpeakerComponent> speakers)
+        public static Vector3 CalculateAudioCenter(List<SpeakerLink> speakers)
         {
             var center = Vector3.zero;
             foreach (var speaker in speakers)
             {
-                center += speaker.transform.position;
+                center += speaker.Position;
             }
             center /= speakers.Count;
             return center;
         }
         
-        public static byte[] CompressSpeakerList(HashSet<SpeakerComponent> speakers)
+        public static byte[] CompressSpeakerLinks(List<SpeakerLink> speakers)
         {
             if (speakers == null) return default;
             using var memoryStream = new MemoryStream();
@@ -210,39 +226,38 @@ namespace OdinOnDemand.Components
                 foreach (var speaker in speakers)
                 {
                     // Write the mGuid and position of each speaker
-                    binaryWriter.Write(speaker.mGUID);
-                    var position = speaker.transform.position;
-                    binaryWriter.Write(position.x);
-                    binaryWriter.Write(position.y);
-                    binaryWriter.Write(position.z);
+                    binaryWriter.Write(speaker.Guid);
+                    binaryWriter.Write(speaker.Position.x);
+                    binaryWriter.Write(speaker.Position.y);
+                    binaryWriter.Write(speaker.Position.z);
                 }
             }
             return memoryStream.ToArray();
         }
-        public static HashSet<SpeakerComponent> DecompressSpeakerList(byte[] data)
+
+        public static List<SpeakerLink> DecompressSpeakerLinks(byte[] data)
         {
-            if(data == null) return new HashSet<SpeakerComponent>();
-            var speakers = new HashSet<SpeakerComponent>();
-            using (var memoryStream = new MemoryStream(data))
+            var speakers = new List<SpeakerLink>();
+            if (data == null || data.Length < sizeof(int)) return speakers;
+            try
             {
-                using (var binaryReader = new BinaryReader(memoryStream))
+                using var memoryStream = new MemoryStream(data);
+                using var binaryReader = new BinaryReader(memoryStream);
+                int count = binaryReader.ReadInt32();  // Read the count of speakers
+
+                for (int i = 0; i < count; i++)
                 {
-                    int count = binaryReader.ReadInt32();  // Read the count of speakers
-
-                    for (int i = 0; i < count; i++)
+                    string mGuid = binaryReader.ReadString();
+                    Vector3 position = new Vector3(binaryReader.ReadSingle(), binaryReader.ReadSingle(), binaryReader.ReadSingle());
+                    if (!speakers.Exists(x => x.Guid == mGuid && x.Position == position))
                     {
-                        string mGuid = binaryReader.ReadString();
-                        Vector3 position = new Vector3(binaryReader.ReadSingle(), binaryReader.ReadSingle(), binaryReader.ReadSingle());
-
-                        // Find the speaker based on mGuid and position
-                        var speakerObject = ComponentLists.SpeakerComponentList.FirstOrDefault(x => x.mGUID.ToString() == mGuid && x.transform.position == position);
-
-                        if (speakerObject != null && !speakers.Contains(speakerObject))
-                        {
-                            speakers.Add(speakerObject);
-                        }
+                        speakers.Add(new SpeakerLink(mGuid, position));
                     }
                 }
+            }
+            catch (EndOfStreamException)
+            {
+                Jotunn.Logger.LogWarning("Ignoring truncated speaker link data.");
             }
             return speakers;
         }

@@ -40,7 +40,18 @@ namespace OdinOnDemand.MPlayer
 
         // Media Player Information
         public string mName { get; set; }
-        public string MediaPlayerID { get; set; }
+        /// <summary>
+        ///     RPC address of this player: its ZDO id, which every client agrees on. The girdle
+        ///     shares its wearer's ZDO, so each wearer's girdle gets a distinct id.
+        /// </summary>
+        public string MediaPlayerID
+        {
+            get
+            {
+                var zdo = ZNetView ? ZNetView.GetZDO() : null;
+                return zdo != null ? zdo.m_uid.ToString() : "";
+            }
+        }
         public string UnparsedURL { get; set; }
         public Uri DownloadURL { get; set; }
         private YoutubeDecoder youtubeDecoder;
@@ -77,7 +88,10 @@ namespace OdinOnDemand.MPlayer
 
         
         // Speaker Management
-        internal HashSet<SpeakerComponent> mSpeakers = new HashSet<SpeakerComponent>();
+        // The saved links are the truth. A linked speaker that is unloaded, or not loaded yet,
+        // stays linked and keeps its place in the audio center on every client.
+        private List<SpeakerLink> speakerLinks = new List<SpeakerLink>();
+        internal int SpeakerCount => speakerLinks.Count;
         private Transform centerAudioSphere;
         protected SphereCollider triggerCollider;
 
@@ -106,23 +120,6 @@ namespace OdinOnDemand.MPlayer
             
             Ytdl = gameObject.AddComponent<DLSharp>();
             StartCoroutine(Ytdl.Setup());
-            
-            var zdo = ZNetView.GetZDO();
-            if (ZNetScene.instance) //If we're freshly placed set some default data and flip bool
-            {
-                if (zdo != null)
-                {
-                    if (!zdo.GetString("MediaPlayerID").Equals(""))
-                    {
-                        RequestOwnership(zdo);
-                        var id = GenerateUniqueID();
-                        zdo.Set("MediaPlayerID", id); // Generate unique ID for this media player
-                        SendUpdateZDO_RPC();
-                    }
-                    
-                    MediaPlayerID = zdo.GetString("MediaPlayerID"); 
-                }
-            }
             
             // Audio fader
             if (OODConfig.AudioFadeType.Value != OODConfig.FadeType.None)
@@ -367,6 +364,7 @@ namespace OdinOnDemand.MPlayer
         private bool UsesVlcBackend()
         {
             return PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Youtube ||
+                   PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.Soundcloud ||
                    PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.NetworkStream ||
                    PlayerSettings.PlayerLinkType == PlayerSettings.LinkType.LiveChannel;
         }
@@ -596,8 +594,10 @@ namespace OdinOnDemand.MPlayer
             using (var cancellation = new CancellationTokenSource())
             {
                 networkCancellation = cancellation;
-                var resolution = StreamlinkRuntime.ResolveAsync(url, OODConfig.MaxVideoHeight.Value,
-                    cancellation.Token);
+                // Thread pool: the runtime scan and process launch run before the first await.
+                var maxHeight = OODConfig.MaxVideoHeight.Value;
+                var resolution = Task.Run(() => StreamlinkRuntime.ResolveAsync(url, maxHeight,
+                    cancellation.Token));
                 yield return new WaitUntil(() => resolution.IsCompleted);
                 if (ReferenceEquals(networkCancellation, cancellation)) networkCancellation = null;
                 // Observe exceptions even when a newer source has superseded this request.
@@ -744,25 +744,10 @@ namespace OdinOnDemand.MPlayer
         private void UpdateChecks() //1second checks, screen render distance, master volume updates and playlist gui updates
         {
             //Master volume updates from config
-            mAudio.outputAudioMixerGroup.audioMixer.GetFloat("MasterVolume", out var masterVolumeCheck);
-            if (PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen)
-            {
-                if (masterVolumeCheck != OODConfig.MasterVolumeScreen.Value)
-                    mAudio.outputAudioMixerGroup.audioMixer.SetFloat("MasterVolume",
-                        OODConfig.MasterVolumeScreen.Value);
-            }
-            else if(PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.BeltPlayer || PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CartPlayer)
-            {
-                if (masterVolumeCheck != OODConfig.MasterVolumeTransport.Value)
-                    mAudio.outputAudioMixerGroup.audioMixer.SetFloat("MasterVolume",
-                        OODConfig.MasterVolumeTransport.Value);
-            }
-            else 
-            {
-                if (masterVolumeCheck != OODConfig. MasterVolumeMusicplayer.Value)
-                    mAudio.outputAudioMixerGroup.audioMixer.SetFloat("MasterVolume",
-                        OODConfig.MasterVolumeMusicplayer.Value);
-            }
+            var masterVolume = OODConfig.MasterVolumeFor(PlayerSettings.PlayerType).Value;
+            var mixer = mAudio.outputAudioMixerGroup.audioMixer;
+            if (!mixer.GetFloat("MasterVolume", out var masterVolumeCheck) || masterVolumeCheck != masterVolume)
+                mixer.SetFloat("MasterVolume", masterVolume);
 
             //Playlist track or media info rows in the URL panel
             UIController.UpdateMediaInfo();
@@ -1137,9 +1122,11 @@ namespace OdinOnDemand.MPlayer
 
         protected IEnumerator AudioWebRequest(Uri url, int generation)
         {
-            var dh = new DownloadHandlerAudioClip(url, AudioType.MPEG)
+            // Compressed clips decode as they play. Uncompressed ones are decoded in full on the
+            // main thread when the clip is created, a visible hitch for anything long.
+            var dh = new DownloadHandlerAudioClip(url, AudioTypeFor(url))
             {
-                compressed = false
+                compressed = true
             };
             using var wr = new UnityWebRequest(url, "GET", dh, null);
             yield return wr.SendWebRequest();
@@ -1163,6 +1150,19 @@ namespace OdinOnDemand.MPlayer
             if (ScreenUICanvasObj) ScreenUICanvasObj.SetActive(true);
             UpdateRadioPanel();
             UIController.ResetLoadingIndicator();
+        }
+
+        internal static AudioType AudioTypeFor(Uri url)
+        {
+            switch (Path.GetExtension(url.AbsolutePath).ToLowerInvariant())
+            {
+                case ".mp3": return AudioType.MPEG;
+                case ".ogg": return AudioType.OGGVORBIS;
+                case ".wav": return AudioType.WAV;
+                case ".aif":
+                case ".aiff": return AudioType.AIFF;
+                default: return AudioType.UNKNOWN;
+            }
         }
 
         private IEnumerator CreateThumbnailFromURL(Uri url, int generation)
@@ -1204,7 +1204,9 @@ namespace OdinOnDemand.MPlayer
                         else
                             PlayerSettings.Thumbnail = null;
                         if (!string.IsNullOrEmpty(title)) PlayerSettings.MediaTitle = title;
-                        StartCoroutine(AudioWebRequest(resultUrl, generation));
+                        // Stream through VLC. Unity's clip download fetched the whole track and
+                        // then decoded all of it on the main thread, freezing the game on long mixes.
+                        PrepareVlcBackend(resultUrl.AbsoluteUri, null, generation, useChunkedInput: false);
                     }
                     else
                     {
@@ -1521,10 +1523,17 @@ namespace OdinOnDemand.MPlayer
             PlayerSettings.DynamicStation = station;
         }
 
+        /// <summary>
+        ///     False for a player that lives on another object's ZDO (the girdle uses its wearer's).
+        ///     That ZDO is never handed over, and only its owner writes to it.
+        /// </summary>
+        protected virtual bool OwnsZdo => true;
+
         public virtual void SaveZDO(bool saveTime = true)
         {
             var zdo = ZNetView.GetZDO();
             if (zdo == null || mAudio == null) return;
+            if (!OwnsZdo && !zdo.IsOwner()) return;
             RequestOwnership(zdo);
             zdo.Set("distance", mAudio.maxDistance);
             zdo.Set("adminOnly", PlayerSettings.AdminOnly);
@@ -1535,15 +1544,22 @@ namespace OdinOnDemand.MPlayer
             zdo.Set("currentMode", (int)PlayerSettings.CurrentMode);
             zdo.Set("url", UnparsedURL ?? "");
             if (saveTime) SaveTimeZDO();
-            zdo.Set("speakers", SpeakerHelper.CompressSpeakerList(mSpeakers));
-            zdo.Set("speakerCount", mSpeakers.Count);
+            zdo.Set("speakers", SpeakerHelper.CompressSpeakerLinks(speakerLinks));
+            zdo.Set("speakerCount", speakerLinks.Count);
         }
         
         public void SaveTimeZDO()
         {
             var zdo = ZNetView.GetZDO();
-            if (zdo != null)
-                zdo.Set("time", (float)PlaybackTime);
+            if (zdo == null || (!OwnsZdo && !zdo.IsOwner())) return;
+            zdo.Set("time", (float)PlaybackTime);
+        }
+
+        /// <summary>Keeps the playback position when this client, as owner, unloads the player.</summary>
+        protected void SaveTimeOnUnload()
+        {
+            var zdo = ZNetView ? ZNetView.GetZDO() : null;
+            if (zdo != null && zdo.IsOwner() && PlayerSettings.IsPlaying) SaveTimeZDO();
         }
 
         public virtual void LoadZDO()
@@ -1558,8 +1574,8 @@ namespace OdinOnDemand.MPlayer
             //Logger.LogInfo("loaded url from zdo: " + UnparsedURL);
             PlayerSettings.IsLooping = zdo.GetBool("isLooping");
             SetLooping(PlayerSettings.IsLooping);
-            mSpeakers = SpeakerHelper.DecompressSpeakerList(zdo.GetByteArray("speakers"));
-            UpdateSpeakerCenter();
+            LoadSpeakerLinks(zdo);
+            LoadLocalVolume();
             PlayerSettings.IsPlaying = zdo.GetBool("isPlaying");
             PlayerSettings.IsPaused = zdo.GetBool("isPaused");
             PlayerSettings.CurrentMode = (PlayerSettings.PlayerMode)zdo.GetInt("currentMode");
@@ -1657,11 +1673,7 @@ namespace OdinOnDemand.MPlayer
                 }
             }
 
-            if (zdo.GetInt("speakerCount") != mSpeakers.Count)
-            {
-                mSpeakers = SpeakerHelper.DecompressSpeakerList(zdo.GetByteArray("speakers"));
-                UpdateSpeakerCenter();
-            }
+            LoadSpeakerLinks(zdo);
         }
         
         public async void RPC_UpdateZDO() //Update ZDO with a delay
@@ -1714,11 +1726,6 @@ namespace OdinOnDemand.MPlayer
             }
         }
 
-        private string GenerateUniqueID()
-        {
-            return System.IO.Path.GetRandomFileName().Replace(".", "") + "-" + DateTime.Now.Ticks +  "-" + Player.m_localPlayer.GetZDOID().UserID;
-        }
-        
         public Coroutine StartPlayerCoroutine(IEnumerator routine)
         {
             return StartCoroutine(routine);
@@ -1731,7 +1738,7 @@ namespace OdinOnDemand.MPlayer
         
         public void ClaimOwnership(ZDO zdo)
         {
-            if(zdo == null) return;
+            if(zdo == null || !OwnsZdo) return;
             if (zdo.IsOwner())
                 return;
             zdo.SetOwner(ZDOMan.GetSessionID());
@@ -1740,7 +1747,7 @@ namespace OdinOnDemand.MPlayer
         public void SetOwnership(long peer)
         {
             var zdo = ZNetView.GetZDO();
-            if (zdo == null) return;
+            if (zdo == null || !OwnsZdo) return;
             if (!zdo.IsOwner())
                 return;
            
@@ -1750,7 +1757,7 @@ namespace OdinOnDemand.MPlayer
         
         public void RequestOwnership(ZDO zdo)
         {
-            if (zdo == null) return;
+            if (zdo == null || !OwnsZdo) return;
             if (zdo.IsOwner())
                 return;
             var player = Player.s_players.FirstOrDefault(p => p != null && p.m_nview != null && p.m_nview.IsValid() && p.GetZDOID().UserID == zdo.GetOwner());
@@ -1766,50 +1773,108 @@ namespace OdinOnDemand.MPlayer
 
         public bool AddSpeaker(SpeakerComponent sp)
         {
-            if (mSpeakers.Add(sp))
-            {
-                SaveZDO();
-                UpdateSpeakerCenter();
-                StartCoroutine(ShowCenterSphere());
-                SendUpdateZDO_RPC();
-                return true;
-            }
-
-            return false;
+            if (FindSpeakerLink(sp) >= 0) return false;
+            speakerLinks.Add(new SpeakerLink(sp.mGUID, sp.transform.position));
+            OnSpeakerLinksChanged();
+            return true;
         }
         
         public void RemoveSpeaker(SpeakerComponent sp)
         {
-            if (mSpeakers.Remove(sp))
-            {
-                SaveZDO();
-                UpdateSpeakerCenter();
-                StartCoroutine(ShowCenterSphere());
-                SendUpdateZDO_RPC();
-                return;
-            }
-            return;
+            var index = FindSpeakerLink(sp);
+            if (index < 0) return;
+            speakerLinks.RemoveAt(index);
+            OnSpeakerLinksChanged();
+        }
+
+        internal bool IsLinkedTo(SpeakerComponent sp)
+        {
+            return FindSpeakerLink(sp) >= 0;
+        }
+
+        // Links from older versions may carry a guid the speaker no longer reports, so the
+        // saved position is the fallback match.
+        private int FindSpeakerLink(SpeakerComponent sp)
+        {
+            var guid = sp.mGUID;
+            var index = speakerLinks.FindIndex(link => link.Guid == guid);
+            if (index >= 0) return index;
+            var position = sp.transform.position;
+            return speakerLinks.FindIndex(link => (link.Position - position).sqrMagnitude < 0.01f);
+        }
+
+        private void OnSpeakerLinksChanged()
+        {
+            SaveZDO();
+            UpdateSpeakerCenter();
+            UIController.UpdateSpeakerCount();
+            StartCoroutine(ShowCenterSphere());
+            SendUpdateZDO_RPC();
+        }
+
+        private void LoadSpeakerLinks(ZDO zdo)
+        {
+            speakerLinks = SpeakerHelper.DecompressSpeakerLinks(zdo.GetByteArray("speakers"));
+            UpdateSpeakerCenter();
         }
         
         private void UpdateSpeakerCenter()
         {
-            if (mSpeakers.Count == 0)
-            {
-                mAudio.transform.position = transform.position;
-                return;
-            }
-            var center = SpeakerHelper.CalculateAudioCenter(mSpeakers.ToList());
-            mAudio.transform.position = center;
+            if (!mAudio) return;
+            mAudio.transform.position = speakerLinks.Count == 0
+                ? transform.position
+                : SpeakerHelper.CalculateAudioCenter(speakerLinks);
         }
 
         public void UnlinkAllSpeakers()
         {
-            mSpeakers.Clear();
-            UIController.UpdateSpeakerCount();
-            UpdateSpeakerCenter();
-            StartCoroutine(ShowCenterSphere());
-            SaveZDO();
-            SendUpdateZDO_RPC();
+            speakerLinks.Clear();
+            OnSpeakerLinksChanged();
+        }
+
+        /// <summary>Sets this client's volume for the player and remembers it for the next load.</summary>
+        public void SetVolume(float volume)
+        {
+            PlayerSettings.Volume = volume;
+            if (mAudio) mAudio.volume = volume;
+            var key = LocalVolumeKey;
+            if (key == null) return;
+            PlayerPrefs.SetFloat(key, volume);
+            PlayerPrefs.SetFloat(key + ".unmuted", PlayerSettings.MuteVol);
+        }
+
+        /// <summary>Restores the volume this client last set for the player, if any.</summary>
+        protected void LoadLocalVolume()
+        {
+            var key = LocalVolumeKey;
+            if (key == null || !PlayerPrefs.HasKey(key)) return;
+            PlayerSettings.Volume = PlayerPrefs.GetFloat(key, PlayerSettings.Volume);
+            PlayerSettings.MuteVol = PlayerPrefs.GetFloat(key + ".unmuted", PlayerSettings.MuteVol);
+            if (mAudio) mAudio.volume = PlayerSettings.Volume;
+            UIController?.UpdateVolumeControls();
+        }
+
+        // Volume is a per-client preference, so it is kept in local prefs rather than the ZDO.
+        // Placed pieces are keyed by position, which survives server restarts; the girdle is
+        // one per character and the wagon moves, so it keeps its session id.
+        private string LocalVolumeKey
+        {
+            get
+            {
+                const string prefix = "OdinOnDemand.Volume.";
+                switch (PlayerSettings.PlayerType)
+                {
+                    case CinemaPackage.MediaPlayers.BeltPlayer:
+                        return prefix + "girdle";
+                    case CinemaPackage.MediaPlayers.CartPlayer:
+                        var id = MediaPlayerID;
+                        return id.Length == 0 ? null : prefix + id;
+                    default:
+                        var p = transform.position;
+                        return prefix + string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                            "{0:F1},{1:F1},{2:F1}", p.x, p.y, p.z);
+                }
+            }
         }
         
         private IEnumerator ShowCenterSphere()

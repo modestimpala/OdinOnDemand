@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using OdinOnDemand.Utils.Config;
 using UnityEngine;
@@ -140,7 +141,9 @@ namespace OdinOnDemand.Utils.Net.Explode
             }
 
             Ytdl = new YoutubeDL { YoutubeDLPath = YtDlpPath };
-            ExternalJsRuntime.Refresh();
+            // Off the Unity thread: the scan walks PATH and the registry for every loaded player.
+            var refresh = ExternalJsRuntime.RefreshInBackground();
+            yield return new WaitUntil(() => refresh.IsCompleted);
             yield return ApplyUpdateChannel(timeoutSeconds);
             onComplete?.Invoke(true);
         }
@@ -160,7 +163,8 @@ namespace OdinOnDemand.Utils.Net.Explode
             // --update-to stable would downgrade a user who had nightly enabled earlier.
             var options = new OptionSet { Update = true, NoPostOverwrites = true };
             if (channel == NightlyChannel) options.UpdateTo = NightlyChannel;
-            var update = Ytdl.RunWithOptions(Array.Empty<string>(), options, CancellationToken.None);
+            // Thread pool: YoutubeDLSharp starts the process synchronously before its first await.
+            var update = Task.Run(() => Ytdl.RunWithOptions(Array.Empty<string>(), options, CancellationToken.None));
             float elapsed = 0;
             while (!update.IsCompleted && elapsed < timeoutSeconds)
             {
@@ -215,7 +219,8 @@ namespace OdinOnDemand.Utils.Net.Explode
             // Pass the discovered path even for Deno; yt-dlp cannot see registry-only PATH updates.
             var jsRuntimes = ExternalJsRuntime.JsRuntimesArgument;
             if (jsRuntimes != null) options.AddCustomOption("--js-runtimes", jsRuntimes);
-            var operation = Ytdl.RunWithOptions(new[] { url }, options, cts.Token);
+            var token = cts.Token;
+            var operation = Task.Run(() => Ytdl.RunWithOptions(new[] { url }, options, token));
             try
             {
                 float elapsedTime = 0;

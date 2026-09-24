@@ -27,7 +27,12 @@ namespace OdinOnDemand.Components
             mAudio.maxDistance = OODConfig.MobileListeningDistance.Value;
             mScreen.isLooping = true;
             mAudio.loop = true;
+            LoadLocalVolume();
         }
+
+        // The girdle stores its state on the wearer's player ZDO. Handing that ZDO to another
+        // peer takes the character away from its player: a black screen until relog.
+        protected override bool OwnsZdo => false;
         
         private new void OnDestroy()
         {

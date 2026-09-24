@@ -4,6 +4,8 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 using LibVLCSharp.Shared;
 using Logger = Jotunn.Logger;
 
@@ -17,6 +19,9 @@ namespace OdinOnDemand.MPlayer
     ///     2 Mbit/s while bounded chunk requests reach 8 Mbit/s, so reading in chunks keeps the
     ///     buffer ahead of playback. LibVLC pulls through these callbacks on its own input thread,
     ///     so blocking here is expected and never touches the Unity thread.
+    ///     The next chunk downloads in the background while the current one is read. LibVLC only
+    ///     caches about 300 ms ahead of a callback input, so fetching on demand stalled playback
+    ///     (and dropped its audio) for as long as a 4 MB request took on a slow connection.
     /// </summary>
     internal sealed class ChunkedHttpMediaInput : MediaInput
     {
@@ -38,6 +43,24 @@ namespace OdinOnDemand.MPlayer
         private long position;
         private long totalLength = -1;
 
+        // Background download of the chunk after the current one, and a buffer to reuse for it.
+        private Prefetch prefetch;
+        private byte[] spareBuffer;
+
+        private sealed class Prefetch
+        {
+            public long Offset;
+            public int Size;
+            public Task<ChunkData> Download;
+            public CancellationTokenSource Cancellation;
+        }
+
+        private sealed class ChunkData
+        {
+            public byte[] Buffer;
+            public int Length;
+        }
+
         public ChunkedHttpMediaInput(string url, IDictionary<string, string> headers)
         {
             this.url = url;
@@ -50,8 +73,9 @@ namespace OdinOnDemand.MPlayer
             try
             {
                 // The first chunk doubles as the length probe, so playback starts on one request.
-                if (!FetchChunk(0)) return false;
-                if (totalLength < 0) return false;
+                var first = Download(0, chunkSize, null, true, CancellationToken.None);
+                if (first == null || totalLength < 0) return false;
+                UseChunk(0, first);
 
                 position = 0;
                 size = (ulong)totalLength;
@@ -100,6 +124,8 @@ namespace OdinOnDemand.MPlayer
 
         public override void Close()
         {
+            CancelPrefetch();
+            spareBuffer = null;
             chunk = null;
             chunkLength = 0;
             chunkStart = 0;
@@ -110,17 +136,93 @@ namespace OdinOnDemand.MPlayer
         private bool EnsureChunkContains(long offset)
         {
             if (chunk != null && offset >= chunkStart && offset < chunkStart + chunkLength) return true;
-            return FetchChunk(offset);
+
+            var pending = prefetch;
+            prefetch = null;
+            if (pending != null && offset >= pending.Offset && offset < pending.Offset + pending.Size)
+            {
+                // Usually already finished; otherwise this waits on the part still in flight.
+                var data = pending.Download.Result;
+                pending.Cancellation.Dispose();
+                if (data != null && offset < pending.Offset + data.Length)
+                {
+                    UseChunk(pending.Offset, data);
+                    return true;
+                }
+            }
+            else if (pending != null)
+            {
+                Cancel(pending);
+            }
+
+            var fetched = Download(offset, chunkSize, TakeSpareBuffer(), false, CancellationToken.None);
+            if (fetched == null) return false;
+            UseChunk(offset, fetched);
+            return true;
         }
 
-        private bool FetchChunk(long offset)
+        private void UseChunk(long offset, ChunkData data)
         {
-            var last = offset + chunkSize - 1;
+            if (chunk != null && chunk != data.Buffer) spareBuffer = chunk;
+            chunk = data.Buffer;
+            chunkStart = offset;
+            chunkLength = data.Length;
+            if (chunkSize < MaxChunkSize) chunkSize = Math.Min(chunkSize * 4, MaxChunkSize);
+            StartPrefetch(chunkStart + chunkLength);
+        }
+
+        private void StartPrefetch(long offset)
+        {
+            if (totalLength >= 0 && offset >= totalLength) return;
+
+            var size = chunkSize;
+            var buffer = TakeSpareBuffer();
+            var cancellation = new CancellationTokenSource();
+            prefetch = new Prefetch
+            {
+                Offset = offset,
+                Size = size,
+                Cancellation = cancellation,
+                Download = Task.Run(() => Download(offset, size, buffer, false, cancellation.Token))
+            };
+        }
+
+        private void CancelPrefetch()
+        {
+            var pending = prefetch;
+            prefetch = null;
+            if (pending != null) Cancel(pending);
+        }
+
+        private static void Cancel(Prefetch pending)
+        {
+            pending.Cancellation.Cancel();
+            // Dispose once the aborted request has unwound; it still holds the token.
+            pending.Download.ContinueWith(_ => pending.Cancellation.Dispose(), TaskScheduler.Default);
+        }
+
+        private byte[] TakeSpareBuffer()
+        {
+            var buffer = spareBuffer;
+            spareBuffer = null;
+            return buffer;
+        }
+
+        /// <summary>
+        ///     Downloads [offset, offset + size) clamped to the media length. Returns null on failure
+        ///     or cancellation. Only the synchronous first request records the total length, so the
+        ///     background download never writes shared state.
+        /// </summary>
+        private ChunkData Download(long offset, int size, byte[] buffer, bool readLength,
+            CancellationToken cancellation)
+        {
+            var last = offset + size - 1;
             if (totalLength >= 0 && last > totalLength - 1) last = totalLength - 1;
-            if (last < offset) return false;
+            if (last < offset) return null;
 
             for (var attempt = 1; attempt <= MaxAttempts; attempt++)
             {
+                if (cancellation.IsCancellationRequested) return null;
                 try
                 {
                     var request = (HttpWebRequest)WebRequest.Create(url);
@@ -132,15 +234,16 @@ namespace OdinOnDemand.MPlayer
                     ApplyHeaders(request);
                     request.AddRange(offset, last);
 
+                    using (cancellation.Register(request.Abort))
                     using (var response = (HttpWebResponse)request.GetResponse())
                     using (var stream = response.GetResponseStream())
                     {
-                        if (stream == null) return false;
+                        if (stream == null) return null;
 
-                        ReadTotalLength(response);
+                        if (readLength) ReadTotalLength(response);
 
                         var expected = (int)(last - offset + 1);
-                        var buffer = chunk != null && chunk.Length >= expected ? chunk : new byte[expected];
+                        if (buffer == null || buffer.Length < expected) buffer = new byte[expected];
                         var read = 0;
                         while (read < expected)
                         {
@@ -149,24 +252,20 @@ namespace OdinOnDemand.MPlayer
                             read += got;
                         }
 
-                        if (read <= 0) return false;
-
-                        chunk = buffer;
-                        chunkStart = offset;
-                        chunkLength = read;
-                        if (chunkSize < MaxChunkSize) chunkSize = Math.Min(chunkSize * 4, MaxChunkSize);
-                        return true;
+                        if (read <= 0 || cancellation.IsCancellationRequested) return null;
+                        return new ChunkData { Buffer = buffer, Length = read };
                     }
                 }
-                catch (WebException exception)
+                catch (Exception exception) when (exception is WebException || exception is IOException)
                 {
+                    if (cancellation.IsCancellationRequested) return null;
                     Logger.LogWarning(
                         $"Media chunk {offset}-{last} failed (attempt {attempt}/{MaxAttempts}): {exception.Message}");
-                    if (attempt == MaxAttempts) return false;
+                    if (attempt == MaxAttempts) return null;
                 }
             }
 
-            return false;
+            return null;
         }
 
         private void ReadTotalLength(HttpWebResponse response)

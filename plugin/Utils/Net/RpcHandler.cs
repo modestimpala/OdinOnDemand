@@ -148,8 +148,13 @@ namespace OdinOnDemand.Utils.Net
 
             if (playerType != null && ComponentLists.MediaComponentLists.TryGetValue(playerType, out var list))
             {
-                mp = list.Cast<BasePlayer>().FirstOrDefault(x => x is MediaPlayerComponent mpc && mpc.transform.position == pos) ?? 
-                     list.Cast<BasePlayer>().FirstOrDefault(x => x.MediaPlayerID == package.data.mediaPlayerID);
+                // Match on the ZDO id. Older clients sent an empty id, which used to pick the first
+                // girdle or receiver in the list; placed pieces still fall back to their position.
+                var id = package.data.mediaPlayerID;
+                var players = list.Cast<BasePlayer>().Where(x => x).ToList();
+                mp = (string.IsNullOrEmpty(id) ? null : players.FirstOrDefault(x => x.MediaPlayerID == id)) ??
+                     players.FirstOrDefault(x => (x is MediaPlayerComponent || x is ReceiverComponent) &&
+                                                 x.transform.position == pos);
             }
 
             if (mp == null)

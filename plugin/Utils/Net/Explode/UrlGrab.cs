@@ -43,7 +43,7 @@ namespace OdinOnDemand.Utils.Net.Explode
             LoadingBool = true;
             var youtube = new YoutubeClient();
 
-            var manifestTask = Async.GetYoutubeManifestAsync(youtube, url, Source.Token);
+            var manifestTask = Task.Run(() => Async.GetYoutubeManifestAsync(youtube, url, Source.Token));
 
             // Wait for the task to complete.
             yield return new WaitUntil(() => manifestTask.IsCompleted);
@@ -73,16 +73,22 @@ namespace OdinOnDemand.Utils.Net.Explode
             var urlString = url.AbsoluteUri;
             LoadingBool = true;
             var soundcloud = new SoundCloudClient();
-            // Start initialization
-            soundcloud.InitializeAsync();
-    
-            // Wait until initialization is complete
-            while (!soundcloud.IsInitialized)
+            // Every network call runs on the thread pool: Mono can resolve DNS synchronously on the
+            // calling thread before the first await, which stalled the game.
+            // Wait on the task itself: polling IsInitialized never ended when initialization failed.
+            var initTask = Task.Run(() => soundcloud.InitializeAsync(Source.Token));
+            yield return new WaitUntil(() => initTask.IsCompleted);
+            if (initTask.IsFaulted || initTask.IsCanceled || !soundcloud.IsInitialized)
             {
-                yield return null;
+                Logger.LogError("Could not reach SoundCloud: " +
+                                (initTask.Exception?.GetBaseException().Message ?? "initialization failed"));
+                LoadingBool = false;
+                FailBool = true;
+                callback(null, null, null);
+                yield break;
             }
             
-            var trackTask = Async.GetSoundCloudTrackAsync(soundcloud, urlString, Source.Token);
+            var trackTask = Task.Run(() => Async.GetSoundCloudTrackAsync(soundcloud, urlString, Source.Token));
 
             // Wait for the task to complete.
             yield return new WaitUntil(() => trackTask.IsCompleted);
@@ -99,7 +105,7 @@ namespace OdinOnDemand.Utils.Net.Explode
                 yield break;
             }
             
-            var urlTask = Async.GetSoundCloudTrackUrlAsync(soundcloud, soundCloudTrack, Source.Token);
+            var urlTask = Task.Run(() => Async.GetSoundCloudTrackUrlAsync(soundcloud, soundCloudTrack, Source.Token));
             yield return new WaitUntil(() => urlTask.IsCompleted);
             var soundCloudUrl = urlTask.Result;
             
@@ -123,7 +129,7 @@ namespace OdinOnDemand.Utils.Net.Explode
         {
             LoadingBool = true;
             var youtube = new YoutubeClient();
-            var playlistTask = Async.GetPlaylistVideoStreamsAsync(youtube, url, Source.Token);
+            var playlistTask = Task.Run(() => Async.GetPlaylistVideoStreamsAsync(youtube, url, Source.Token));
 
             // Wait for the task to complete
             yield return new WaitUntil(() => playlistTask.IsCompleted);

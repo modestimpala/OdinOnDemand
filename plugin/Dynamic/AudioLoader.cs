@@ -67,6 +67,9 @@ namespace OdinOnDemand.Dynamic
                         continue;
                     }
                     using var www = UnityWebRequestMultimedia.GetAudioClip("file://" + filePath, AudioType.UNKNOWN);
+                    // Keep tracks compressed: decoding every station track to PCM up front stalls
+                    // the main thread and holds each track uncompressed in memory.
+                    ((DownloadHandlerAudioClip)www.downloadHandler).compressed = true;
                     yield return www.SendWebRequest();
 
                     if (www.result == UnityWebRequest.Result.Success)

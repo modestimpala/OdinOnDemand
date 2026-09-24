@@ -3,6 +3,27 @@
 
 ### Versions:
 
+## 1.2.6
+ - Moved settings to `BepInEx/config/com.valmedia.odinondemand.cfg`. The old `OdinOnDemand/config.cfg` is moved over automatically on first launch.
+  - Fixed server settings being ignored by clients, including **Skalds Girdle Sold at Haldor** and **Skalds Girdle Cost**.
+  - Fixed settings not showing up in in-game config editors and mod managers.
+ - Fixed a black screen while wearing Skald's Girdle that required a relog. Another player's game could take control of the wearer's character.
+ - Fixed Skald's Girdle being sold by every trader instead of only Haldor, which could break other stores such as Epic Loot's.
+ - Fixed game music getting much louder after placing any OdinOnDemand piece, until restart. Music now only fades down near an active player.
+ - Fixed linked speakers dropping out, snapping back to the receiver, or playing from different places for different players.
+  - Links now stay in place while speakers are unloaded, and removing a speaker unlinks it.
+ - Fixed player controls sometimes reaching the wrong receiver, cart, or girdle when more than one was nearby.
+ - Fixed volume resetting to default after walking out of range, using a portal, or restarting. Volume is now remembered per player on your own machine.
+ - Fixed unmuting leaving the volume at 0.
+ - Fixed opening the cog menu on Skald's Girdle or Bard's Wagon overwriting their master volume with the radio master volume.
+ - Fixed a remote control error when using Skald's Girdle while its player wasn't available.
+ - Fixed YouTube audio dropping out on slower connections. The next piece of the video now downloads in the background while the current one plays.
+ - Added a client-side **Stream Buffer Milliseconds** setting (default 1500). Raise it if audio still drops out on a slow or unstable connection.
+ - SoundCloud now streams through VLC, fixing the game freezing while long tracks and mixes loaded. Playback also starts sooner.
+ - Fixed SoundCloud loading forever when SoundCloud couldn't be reached.
+ - Local audio files and folder radio stations now stay compressed in memory, fixing load hitches and high memory use with long tracks.
+ - Moved YouTube, SoundCloud, yt-dlp, Streamlink, and JavaScript runtime lookups off the game thread to prevent small freezes when media loads.
+
 ## 1.2.5
  - Added online radio playback through VLC with support for station URLs without file extensions, with waveform support. Thanks isimp for the suggestion. 
  - Added optional Streamlink detection, adding in full support for Twitch and Kick playback!

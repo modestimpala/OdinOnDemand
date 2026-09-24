@@ -37,7 +37,11 @@ namespace OdinOnDemand.MPlayer
 
         public bool IsShuffling { set; get; }
 
-        public float MuteVol { set; get; } = 0.5f;
+        /// <summary>Volume restored by unmuting when no earlier level is known.</summary>
+        public const float FallbackUnmuteVolume = 0.5f;
+
+        /// <summary>The volume to return to on unmute.</summary>
+        public float MuteVol { set; get; } = FallbackUnmuteVolume;
 
         public float VerticalDistanceDropoff { set; get; } = 0f;
         

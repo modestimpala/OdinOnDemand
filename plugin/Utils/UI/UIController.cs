@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Jotunn.Managers;
@@ -26,6 +27,8 @@ namespace OdinOnDemand.Utils.UI
         internal GameObject LockedIconObj;
         private Slider _masterVolumeSliderComponent;
         private GameObject _mutedVolumeObj;
+        private readonly List<GameObject> _mutedIconObjs = new List<GameObject>();
+        private readonly List<GameObject> _unmutedIconObjs = new List<GameObject>();
         private DefaultControls.Resources _oodResources;
         private GameObject _playlistIndexObj;
         private Text _playlistIndexText;
@@ -99,28 +102,36 @@ namespace OdinOnDemand.Utils.UI
 
         private void ToggleMute()
         {
-            bool isMuted = _basePlayer.mAudio.volume > 0f;
-            _basePlayer.mAudio.volume = isMuted ? 0f : _basePlayer.PlayerSettings.MuteVol;
-    
-            // Update the UI elements based on the mute state
-            if (_mutedVolumeObj != null)
+            var settings = _basePlayer.PlayerSettings;
+            if (settings.Volume > 0f)
             {
-                _mutedVolumeObj.SetActive(isMuted);
-                _unmutedVolumeObj.SetActive(!isMuted);
+                // Remember the level before zeroing it, so unmuting has something to return to.
+                settings.MuteVol = settings.Volume;
+                _basePlayer.SetVolume(0f);
             }
-
-            // Set the correct volume in the player settings
-            _basePlayer.PlayerSettings.Volume = _basePlayer.mAudio.volume;
-
-            // Update the volume sliders
-            _volumeSlider.value = _basePlayer.PlayerSettings.Volume;
-            _volumeSliderDynamic.value = _basePlayer.PlayerSettings.Volume;
-
-            // Store the unmuted volume if we just muted the audio
-            if (isMuted)
+            else
             {
-                _basePlayer.PlayerSettings.MuteVol = _basePlayer.PlayerSettings.Volume;
+                _basePlayer.SetVolume(settings.MuteVol > 0f ? settings.MuteVol : PlayerSettings.FallbackUnmuteVolume);
             }
+            UpdateVolumeControls();
+        }
+
+        /// <summary>Moves both volume sliders and mute icons to the player's current volume.</summary>
+        internal void UpdateVolumeControls()
+        {
+            var volume = _basePlayer.PlayerSettings.Volume;
+            if (_volumeSlider) _volumeSlider.SetValueWithoutNotify(volume);
+            if (_volumeSliderDynamic) _volumeSliderDynamic.SetValueWithoutNotify(volume);
+            UpdateMuteIcons(volume);
+        }
+
+        private void UpdateMuteIcons(float volume)
+        {
+            var muted = volume <= 0f;
+            foreach (var icon in _mutedIconObjs)
+                if (icon) icon.SetActive(muted);
+            foreach (var icon in _unmutedIconObjs)
+                if (icon) icon.SetActive(!muted);
         }
 
 
@@ -617,6 +628,7 @@ namespace OdinOnDemand.Utils.UI
             var icon = iconObj.AddComponent<Image>();
             icon.sprite = OdinOnDemandPlugin.UISprites["volume"];
             _unmutedVolumeObj = iconObj;
+            _unmutedIconObjs.Add(iconObj);
             iconObj = new GameObject("iconMuted")
             {
                 transform =
@@ -629,8 +641,9 @@ namespace OdinOnDemand.Utils.UI
             icon = iconObj.AddComponent<Image>();
             icon.sprite = OdinOnDemandPlugin.UISprites["mute"];
             _mutedVolumeObj = iconObj;
+            _mutedIconObjs.Add(iconObj);
             _toggleMuteButton.GetComponent<Image>().enabled = false;
-            _mutedVolumeObj.SetActive(false);
+            UpdateMuteIcons(_basePlayer.PlayerSettings.Volume);
 
             //toggle mute action
             var toggleMuteAction = _toggleMuteButton.GetComponent<Button>();
@@ -660,9 +673,9 @@ namespace OdinOnDemand.Utils.UI
             _basePlayer.PlayerSettings.IsSettingsGuiActive = !_settingsPanelObj.activeSelf;
             if (_settingsPanelObj)
             {
-                _masterVolumeSliderComponent.value = _basePlayer.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen
-                    ? OODConfig.MasterVolumeScreen.Value
-                    : OODConfig.MasterVolumeMusicplayer.Value;
+                // Without notify: opening the cog menu must not write this value back to the config.
+                _masterVolumeSliderComponent.SetValueWithoutNotify(
+                    OODConfig.MasterVolumeFor(_basePlayer.PlayerSettings.PlayerType).Value);
                 if (_adminOnlyToggle) _adminOnlyToggle.isOn = _basePlayer.PlayerSettings.AdminOnly;
                 if (_nightlyYtDlpToggle) _nightlyYtDlpToggle.SetIsOnWithoutNotify(OODConfig.UseNightlyYtDlp.Value);
                 if (_maxHeightLabel) _maxHeightLabel.text = MaxHeightLabelText();
@@ -675,7 +688,7 @@ namespace OdinOnDemand.Utils.UI
 
         internal void UpdateSpeakerCount()
         {
-            if(_speakerText) _speakerText.text = "Speakers: " + _basePlayer.mSpeakers.Count;
+            if(_speakerText) _speakerText.text = "Speakers: " + _basePlayer.SpeakerCount;
         }
 
         private const float SettingsRowInset = 10f;
@@ -791,10 +804,8 @@ namespace OdinOnDemand.Utils.UI
             _masterVolumeSliderComponent = sliderObj.GetComponent<Slider>();
             _masterVolumeSliderComponent.maxValue = 15f;
             _masterVolumeSliderComponent.minValue = -15f;
-            _masterVolumeSliderComponent.value =
-                _basePlayer.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen
-                    ? OODConfig.MasterVolumeScreen.Value
-                    : OODConfig.MasterVolumeMusicplayer.Value;
+            _masterVolumeSliderComponent.SetValueWithoutNotify(
+                OODConfig.MasterVolumeFor(_basePlayer.PlayerSettings.PlayerType).Value);
             _masterVolumeSliderComponent.onValueChanged.AddListener(OnMasterVolumeChanged);
 
             //////////////////////////////
@@ -1120,18 +1131,8 @@ namespace OdinOnDemand.Utils.UI
 
         private void OnVolumeSliderChanged(float vol)
         {
-            _basePlayer.mAudio.volume = vol;
-            _basePlayer.PlayerSettings.Volume = vol;
-            if (vol <= 0f)
-            {
-                _unmutedVolumeObj.SetActive(false);
-                _mutedVolumeObj.SetActive(true);
-            }
-            else
-            {
-                _unmutedVolumeObj.SetActive(true);
-                _mutedVolumeObj.SetActive(false);
-            }
+            _basePlayer.SetVolume(vol);
+            UpdateVolumeControls();
         }
 
         private void OnAudioDistanceInputEndEdit(string input)
@@ -1173,13 +1174,7 @@ namespace OdinOnDemand.Utils.UI
 
         private void OnMasterVolumeChanged(float vol)
         {
-            if (_basePlayer.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CinemaScreen)
-                OODConfig.MasterVolumeScreen.Value = vol;
-            else if(_basePlayer.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.BeltPlayer || _basePlayer.PlayerSettings.PlayerType == CinemaPackage.MediaPlayers.CartPlayer)
-                OODConfig.MasterVolumeTransport.Value = vol;
-            else 
-                OODConfig.MasterVolumeMusicplayer.Value = vol;
-            
+            OODConfig.MasterVolumeFor(_basePlayer.PlayerSettings.PlayerType).Value = vol;
             OODConfig.ReadAndWriteConfigValues(OdinOnDemandPlugin.OdinConfig);
         }
         
@@ -1190,6 +1185,7 @@ namespace OdinOnDemand.Utils.UI
             UpdateLockIcon();
             UpdateLoopIndicator();
             UpdateSpeakerCount();
+            UpdateVolumeControls();
             
             if (_basePlayer.PlayerSettings.IsPlayingPlaylist)
             {

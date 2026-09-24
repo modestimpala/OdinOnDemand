@@ -65,6 +65,7 @@
         <Compile Include="Patches\PlacePiecePatch.cs" />
         <Compile Include="Patches\PieceCategoryPatch.cs" />
         <Compile Include="Patches\RemovePiecePatch.cs" />
+        <Compile Include="Patches\SpeakerDestroyPatch.cs" />
         <Compile Include="MPlayer\BasePlayer.cs" />
         <Compile Include="MPlayer\PlayerSettings.cs" />
         <Compile Include="MPlayer\YoutubeDecoder.cs" />

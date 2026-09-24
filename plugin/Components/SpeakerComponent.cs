@@ -1,5 +1,4 @@
-﻿using System;
-using OdinOnDemand.Utils.Net;
+﻿using OdinOnDemand.Utils.Net;
 using UnityEngine;
 using Logger = Jotunn.Logger;
 
@@ -8,10 +7,34 @@ namespace OdinOnDemand.Components
 {
     public class SpeakerComponent : MonoBehaviour, Hoverable, Interactable
     {
+        private const string GuidKey = "guid";
+
         public Piece mPiece { get; set; }
         public string mName;
-        public string mGUID = "";
         public ZNetView ZNetView;
+        private string cachedGuid = "";
+
+        /// <summary>
+        ///     The id receivers link to. Speakers from older versions keep their saved guid. New ones
+        ///     use their ZDO id, which every client agrees on, and the owner saves it so it survives
+        ///     restarts. Clients used to invent random guids at the same time and overwrite each other.
+        /// </summary>
+        public string mGUID
+        {
+            get
+            {
+                var zdo = ZNetView ? ZNetView.GetZDO() : null;
+                if (zdo == null) return cachedGuid;
+                var guid = zdo.GetString(GuidKey);
+                if (string.IsNullOrEmpty(guid))
+                {
+                    guid = zdo.m_uid.ToString();
+                    if (zdo.IsOwner()) zdo.Set(GuidKey, guid);
+                }
+                cachedGuid = guid;
+                return guid;
+            }
+        }
 
         private void Awake()
         {
@@ -24,34 +47,12 @@ namespace OdinOnDemand.Components
         
         public void OnEnable()
         {
-            if (mPiece.IsPlacedByPlayer())
-            {
-                LoadZDO(); // If the player is placed by a player, load the zdo data to init}
-                if (string.IsNullOrEmpty(mGUID))
-                {
-                    mGUID = System.IO.Path.GetRandomFileName().Replace(".", "") + "-" + DateTime.Now.Ticks;
-                    SaveZDO();
-                }
-            }
+            if (mPiece.IsPlacedByPlayer()) _ = mGUID;
         }
         
         private void OnDestroy()
         {
             ComponentLists.SpeakerComponentList.Remove(this);
-        }
-        
-        public void SaveZDO()
-        {
-            ZDO zdo = ZNetView.GetZDO();
-            if (!zdo.IsOwner())
-                zdo.SetOwner(ZDOMan.GetSessionID());
-            zdo.Set("guid", mGUID);
-        }
-        
-        public void LoadZDO()
-        {
-            ZDO zdo = ZNetView.GetZDO();
-            mGUID = zdo.GetString("guid", mGUID);
         }
 
         public string GetHoverName()

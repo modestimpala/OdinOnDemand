@@ -1,6 +1,7 @@
 ﻿using BepInEx.Configuration;
 using Jotunn.Managers;
 using Jotunn.Utils;
+using OdinOnDemand.Utils.Net;
 using Logger = Jotunn.Logger;
 
 namespace OdinOnDemand.Utils.Config
@@ -25,6 +26,7 @@ namespace OdinOnDemand.Utils.Config
         public static ConfigEntry<bool> IsYtEnabled { get; private set; } 
         public static ConfigEntry<bool> UseNightlyYtDlp { get; private set; }
         public static ConfigEntry<int> MaxVideoHeight { get; private set; }
+        public static ConfigEntry<int> StreamBufferMs { get; private set; }
         public static ConfigEntry<bool> DecoderAudioStats { get; private set; }
         public static ConfigEntry<bool> AutoUpdateRecipes { get; private set; }
         public static ConfigEntry<bool> DebugEnabled { get; private set; }
@@ -88,6 +90,13 @@ namespace OdinOnDemand.Utils.Config
                     "frame is uploaded from the CPU, so 1440p and 2160p cost several times more than " +
                     "1080p and can stall the game. Client-side; applies on the next load or reload.",
                     new AcceptableValueList<int>(360, 480, 720, 1080, 1440, 2160)));
+
+            StreamBufferMs = config.Bind("YouTube", "Stream Buffer Milliseconds", 1500,
+                new ConfigDescription(
+                    "How far ahead VLC buffers network streams (YouTube audio, SoundCloud, radio, Twitch). " +
+                    "Raise it if audio drops out on a slow or unstable connection; playback takes " +
+                    "that much longer to start. Client-side; applies on the next load or reload.",
+                    new AcceptableValueRange<int>(300, 10000)));
 
             DecoderAudioStats = config.Bind("YouTube", "Decoder Audio Stats", false,
                 new ConfigDescription(
@@ -206,6 +215,21 @@ namespace OdinOnDemand.Utils.Config
                 new ConfigurationManagerAttributes { IsAdminOnly = true }));
             */
             config.SettingChanged += Config_SettingChanged;
+        }
+
+        /// <summary>The mixer master volume entry that applies to a player type.</summary>
+        public static ConfigEntry<float> MasterVolumeFor(CinemaPackage.MediaPlayers playerType)
+        {
+            switch (playerType)
+            {
+                case CinemaPackage.MediaPlayers.CinemaScreen:
+                    return MasterVolumeScreen;
+                case CinemaPackage.MediaPlayers.BeltPlayer:
+                case CinemaPackage.MediaPlayers.CartPlayer:
+                    return MasterVolumeTransport;
+                default:
+                    return MasterVolumeMusicplayer;
+            }
         }
 
         public static void ReadAndWriteConfigValues(ConfigFile config)

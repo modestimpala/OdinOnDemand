@@ -32,7 +32,7 @@ namespace OdinOnDemand
     {
         public const string PluginGUID = "com.valmedia.odinondemand";
         public const string PluginName = "OdinOnDemand";
-        public const string PluginVersion = "1.2.5";
+        public const string PluginVersion = "1.2.6";
 
         private static readonly CustomLocalization Localization = LocalizationManager.Instance.GetLocalization();
         public static readonly RpcHandler RPCHandlers = new RpcHandler();
@@ -44,13 +44,15 @@ namespace OdinOnDemand
         private static string _pieceRecipeFile;
         private static string _itemRecipeFile;
         private static readonly string OdinConfigFolder = Paths.ConfigPath + "/OdinOnDemand/";
-        public static ConfigFile OdinConfig { get; private set; } = new ConfigFile(OdinConfigFolder + "config.cfg", true);
+        public static ConfigFile OdinConfig { get; private set; }
         
         public StationManager StationManager { get; private set; }
 
         private void Awake()
         {
             //setup config
+            OdinConfig = Config;
+            MigrateLegacyConfig();
             OODConfig.Bind(OdinConfig);
             _pieceRecipeFile = OdinConfigFolder + "/recipes.json";
             _itemRecipeFile = OdinConfigFolder + "/recipes_item.json";
@@ -80,6 +82,26 @@ namespace OdinOnDemand
             _harmony.PatchAll();
             
             Jotunn.Logger.LogDebug("** OdinOnDemand Initialized **");
+        }
+
+        /// <summary>
+        ///     Settings used to live in OdinOnDemand/config.cfg, a file config managers never list
+        ///     and Jotunn never synced, so server values such as the Haldor toggle were ignored.
+        /// </summary>
+        private void MigrateLegacyConfig()
+        {
+            var legacyFile = Path.Combine(OdinConfigFolder, "config.cfg");
+            if (!File.Exists(legacyFile) || File.Exists(Config.ConfigFilePath)) return;
+            try
+            {
+                File.Move(legacyFile, Config.ConfigFilePath);
+                Config.Reload();
+                Jotunn.Logger.LogInfo("Moved settings from " + legacyFile + " to " + Config.ConfigFilePath);
+            }
+            catch (Exception e)
+            {
+                Jotunn.Logger.LogWarning("Could not move legacy config " + legacyFile + ": " + e.Message);
+            }
         }
 
         private static void AddCartVariant()

@@ -215,7 +215,7 @@ The config includes settings for YouTube API selection, volume control, distance
 
 ### VLC audio diagnostics
 
-To diagnose audio issues, enable this client-side option in the existing `[YouTube]` section of `BepInEx/config/OdinOnDemand/config.cfg`:
+To diagnose audio issues, enable this client-side option in the existing `[YouTube]` section of `BepInEx/config/com.valmedia.odinondemand.cfg`:
 
 ```ini
 [YouTube]
