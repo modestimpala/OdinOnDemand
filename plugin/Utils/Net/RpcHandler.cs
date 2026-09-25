@@ -1,10 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
-using System.IO.Compression;
 using System.Linq;
-using System.Runtime.Serialization.Formatters.Binary;
 using Jotunn;
 using Jotunn.Entities;
 using Jotunn.Managers;
@@ -14,7 +11,6 @@ using OdinOnDemand.MPlayer;
 using OdinOnDemand.Utils.Config;
 using UnityEngine;
 using static OdinOnDemand.Utils.Net.CinemaPackage;
-using CompressionLevel = System.IO.Compression.CompressionLevel;
 using Logger = Jotunn.Logger;
 
 namespace OdinOnDemand.Utils.Net
@@ -40,7 +36,7 @@ namespace OdinOnDemand.Utils.Net
         private static void SendStationData(CinemaPackage cinemaPackage)
         {
             var station = StationManager.Instance.GetStation(cinemaPackage.data.url);
-            if (station == default) return;
+            if (station == null || station.Tracks.Count == 0) return;
             var package = new CinemaPackage();
             var data = new Data
             {
@@ -54,28 +50,7 @@ namespace OdinOnDemand.Utils.Net
                 playerStatus = cinemaPackage.data.playerStatus
             };
             package.Prepare(RPCDataType.SendStation, cinemaPackage.player, data);
-            
-            var zpackage = new ZPackage();
-            using (var memoryStream = new MemoryStream())
-            {
-                using (var gzipStream = new GZipStream(memoryStream, CompressionLevel.Optimal))
-                {
-                    var formatter = new BinaryFormatter();
-                    formatter.Serialize(gzipStream, package);
-                }
-
-                var array = memoryStream.ToArray();
-                if (OODConfig.DebugEnabled.Value)
-                    Logger.LogDebug($"Serialized and compressed size: {array.Length} bytes");
-                try
-                {
-                    zpackage.Write(array);
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError("Error writing to ZPackage: " + ex.Message);
-                }
-            }
+            var zpackage = package.ToZPackage();
             
             Vector2 targetPos = new Vector2(cinemaPackage.data.x, cinemaPackage.data.z);
             if (ZNet.instance.IsLocalInstance())
@@ -87,7 +62,7 @@ namespace OdinOnDemand.Utils.Net
         
         public static void HandlePackageServer(ZPackage package, long sender)
         {
-            var cinemaPackage = Unpack(package);
+            var cinemaPackage = TryUnpack(package, sender);
             if (cinemaPackage == null) return;
             if (ZNet.instance.IsLocalInstance())
             {
@@ -99,32 +74,51 @@ namespace OdinOnDemand.Utils.Net
                 SendStationData(cinemaPackage);
                 return;
             }
-            if (cinemaPackage.type == RPCDataType.RequestTime && StationManager.Instance.GetStation(cinemaPackage.data.url) != null)
-            {  
+            var timedStation = cinemaPackage.type == RPCDataType.RequestTime
+                ? StationManager.Instance.GetStation(cinemaPackage.data.url)
+                : null;
+            if (timedStation != null)
+            {
+                if (timedStation.Tracks.Count == 0) return;
                 Vector3 pos = new Vector3(cinemaPackage.data.x, cinemaPackage.data.y, cinemaPackage.data.z);
-                OdinOnDemandPlugin.RPCHandlers.SendData(sender, RPCDataType.SyncTime, cinemaPackage.player, cinemaPackage.data.mediaPlayerID, pos, StationManager.Instance.GetStation(cinemaPackage.data.url).Tracks[StationManager.Instance.GetStation(cinemaPackage.data.url).CurrentTrackIndex].CurrentTime);
+                OdinOnDemandPlugin.RPCHandlers.SendData(sender, RPCDataType.SyncTime, cinemaPackage.player, cinemaPackage.data.mediaPlayerID, pos, timedStation.Tracks[timedStation.CurrentTrackIndex].CurrentTime);
                 return;
             }
             
+            // Relay the package as re-encoded here.
             Vector2 targetPos = new Vector2(cinemaPackage.data.x, cinemaPackage.data.z);
-            SendPackageToPeersInRange(package, targetPos);
+            SendPackageToPeersInRange(cinemaPackage.ToZPackage(), targetPos);
         }
 
-        private static void SendPackageToPeersInRange(ZPackage package, Vector3 targetPos, float radius = 128f)
+        private static void SendPackageToPeersInRange(ZPackage package, Vector2 targetPos, float radius = 128f)
         {
-            var peers = ZNet.instance.m_peers;
-            foreach (var peer in peers)
+            // One send for everyone in range. Each SendPackage starts its own coroutine, and this
+            // used to start one per connected peer, in range or not, for every relayed package.
+            var peersInRange = new List<ZNetPeer>();
+            foreach (var peer in ZNet.instance.m_peers)
             {
-                Vector2 peerPos = new Vector2(peer.m_refPos.x, peer.m_refPos.z);
-                float distance = Vector2.Distance(peerPos, targetPos);
-                List<ZNetPeer> peersInRange = new List<ZNetPeer>();
-                // If the distance is less than or equal to the radius, add the player to the list
-                if (distance <= radius)
-                {
-                    peersInRange.Add(peer);
-                }
-                
-                _oodrpc.SendPackage(peersInRange, package);
+                if (!peer.IsReady()) continue;
+                var peerPos = new Vector2(peer.m_refPos.x, peer.m_refPos.z);
+                if (Vector2.Distance(peerPos, targetPos) <= radius) peersInRange.Add(peer);
+            }
+
+            if (peersInRange.Count > 0) _oodrpc.SendPackage(peersInRange, package);
+        }
+
+        /// <summary>A malformed package from one client is dropped, not thrown on the server.</summary>
+        private static CinemaPackage TryUnpack(ZPackage package, long sender)
+        {
+            try
+            {
+                var cinemaPackage = Unpack(package);
+                if (cinemaPackage == null)
+                    Logger.LogWarning("Dropping OdinOnDemand package from peer " + sender + " sent by another version of the mod.");
+                return cinemaPackage;
+            }
+            catch (Exception e)
+            {
+                Logger.LogWarning("Dropping unreadable OdinOnDemand package from peer " + sender + ": " + e.Message);
+                return null;
             }
         }
 
@@ -197,7 +191,8 @@ namespace OdinOnDemand.Utils.Net
         // React to the RPC call on a client
         private IEnumerator OODRPCClientReceive(long sender, ZPackage package)
         {
-            HandlePackageClient(Unpack(package), sender);
+            var cinemaPackage = TryUnpack(package, sender);
+            if (cinemaPackage != null) HandlePackageClient(cinemaPackage, sender);
             yield return null;
         }
         
@@ -246,6 +241,9 @@ namespace OdinOnDemand.Utils.Net
             RequestStation = 90211,
         }
 
+        // Leads every package. Change it with any change to the fields below.
+        private const int ProtocolVersion = 2;
+
         public Data data;
         public RPCDataType type;
         public MediaPlayers player;
@@ -276,49 +274,50 @@ namespace OdinOnDemand.Utils.Net
             };
 
             Prepare(type, player, dataToPack);
+            return ToZPackage();
+        }
+
+        /// <summary>Writes the fields one by one, in a fixed order.</summary>
+        public ZPackage ToZPackage()
+        {
             var package = new ZPackage();
-            using (var memoryStream = new MemoryStream())
-            {
-                using (var gzipStream = new GZipStream(memoryStream, CompressionLevel.Optimal))
-                {
-                    new BinaryFormatter().Serialize(gzipStream, this);
-                }
-
-                var array = memoryStream.ToArray();
-                if (OODConfig.DebugEnabled.Value)
-                    Logger.LogDebug(string.Format("Serialized size: {0} bytes", array.Length));
-                
-                try
-                {
-                    package.Write(array);
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError("Error writing to ZPackage: " + ex.Message);
-                }
-            }
-
+            package.Write(ProtocolVersion);
+            package.Write((int)type);
+            package.Write((int)player);
+            package.Write(data.url ?? "");
+            package.Write(data.mediaPlayerID ?? "");
+            package.Write(data.currentTrackTitle ?? "");
+            package.Write(new Vector3(data.x, data.y, data.z));
+            package.Write(data.time);
+            package.Write(data.toggleBool);
+            package.Write((int)data.playerStatus);
             return package;
         }
 
+        /// <summary>Reads a package, or returns null when it is not this protocol version.</summary>
         public static CinemaPackage Unpack(ZPackage package)
         {
-            var array = package.ReadByteArray();
-            if (OODConfig.DebugEnabled.Value)
-                Logger.LogDebug(string.Format("Deserializing package size: {0} bytes", array.Length));
-            using (var memoryStream = new MemoryStream(array))
+            if (package.ReadInt() != ProtocolVersion) return null;
+            var cinemaPackage = new CinemaPackage
             {
-                using (var gzipStream = new GZipStream(memoryStream, CompressionMode.Decompress, true))
-                {
-                    var obj = new BinaryFormatter().Deserialize(gzipStream);
-                    if (obj is CinemaPackage compressedPackage)
-                    {
-                        return compressedPackage;
-                    }
-                }
-            }
-
-            return null;
+                type = (RPCDataType)package.ReadInt(),
+                player = (MediaPlayers)package.ReadInt()
+            };
+            var data = new Data
+            {
+                url = package.ReadString(),
+                mediaPlayerID = package.ReadString(),
+                currentTrackTitle = package.ReadString()
+            };
+            var pos = package.ReadVector3();
+            data.x = pos.x;
+            data.y = pos.y;
+            data.z = pos.z;
+            data.time = package.ReadSingle();
+            data.toggleBool = package.ReadBool();
+            data.playerStatus = (PlayerStatus)package.ReadInt();
+            cinemaPackage.data = data;
+            return cinemaPackage;
         }
 
         [Serializable]

@@ -67,6 +67,19 @@ namespace OdinOnDemand.MPlayer
         /// <summary>How long after preparing to keep watching for a late video format.</summary>
         private const float VideoOutputWatchSeconds = 3f;
 
+        /// <summary>
+        ///     Drift a network stream is left alone for. Seeking one discards its buffer and
+        ///     waits out the stream buffer again (1.5 s by default), so correcting less than
+        ///     this made playback stutter on every time sync and fall further behind.
+        /// </summary>
+        private const double NetworkSeekTolerance = 1.0d;
+
+        /// <summary>Fresh extractions tried after a video download fails, per window below.</summary>
+        private const int MaxStreamRecoveries = 2;
+        private const float StreamRecoveryWindowSeconds = 120f;
+        private int streamRecoveries;
+        private float streamRecoveryWindowStart = float.NegativeInfinity;
+
 // Playlist Management
         public int PlaylistPosition { get; set; }
         public string PlaylistString { get; set; }
@@ -94,6 +107,42 @@ namespace OdinOnDemand.MPlayer
         internal int SpeakerCount => speakerLinks.Count;
         private Transform centerAudioSphere;
         protected SphereCollider triggerCollider;
+        private AudioTap audioTap;
+        private readonly List<SpeakerEmitter> speakerEmitters = new List<SpeakerEmitter>();
+        private float baseSpatialBlend = 1f;
+
+        /// <summary>
+        ///     Whether the player's own position is one of its speakers: counted in the center
+        ///     and given its own emitter in each-speaker mode.
+        /// </summary>
+        protected virtual bool EmitsFromSelf => true;
+
+        internal IReadOnlyList<SpeakerLink> SpeakerLinks => speakerLinks;
+
+        /// <summary>The volume listeners hear, after mute, the slider and drop-off.</summary>
+        internal float OutputVolume { get; private set; }
+
+        /// <summary>
+        ///     Unity may apply a source's volume before its filters, so the tap would copy audio
+        ///     already scaled by it. In each-speaker mode the source stays at full volume and
+        ///     the emitters apply the volume, once.
+        /// </summary>
+        protected void SetOutputVolume(float volume)
+        {
+            OutputVolume = volume;
+            if (!mAudio) return;
+            mAudio.volume = audioTap && audioTap.Active ? 1f : volume;
+        }
+
+        /// <summary>Where the sound plays from in center mode.</summary>
+        internal Vector3 AudioPosition => mAudio ? mAudio.transform.position : transform.position;
+
+        /// <summary>
+        ///     True on a dedicated server. The server instantiates the pieces around its reference
+        ///     point and every connected player's girdle, but nobody sees or hears them there: it
+        ///     keeps their saved state and plays nothing.
+        /// </summary>
+        protected static bool Headless => OdinOnDemandPlugin.IsHeadless;
 
 
         public void Awake() {
@@ -108,6 +157,11 @@ namespace OdinOnDemand.MPlayer
             URLGrab = new URLGrab();
             ZNetView = gameObject.GetComponentInParent<ZNetView>();
             mScreen = gameObject.GetComponentInChildren<VideoPlayer>();
+            if (Headless)
+            {
+                SetupHeadless();
+                return;
+            }
             //Screen events
             mScreen.prepareCompleted += ScreenPrepareCompleted;
             mScreen.loopPointReached += EndReached;
@@ -130,6 +184,28 @@ namespace OdinOnDemand.MPlayer
                     AudioFaderComp = audioFader.AddComponent<AudioFader>();
                     DontDestroyOnLoad(audioFader);
                 }
+            }
+        }
+
+        /// <summary>
+        ///     Keeps the audio source for its saved range and silences both outputs. Playback on
+        ///     the server used to run yt-dlp, Streamlink and VLC for nobody, and the radio panel's
+        ///     waveform sampled the disabled audio system every frame.
+        /// </summary>
+        private void SetupHeadless()
+        {
+            mAudio = gameObject.GetComponentInChildren<AudioSource>();
+            if (mAudio)
+            {
+                mAudio.playOnAwake = false;
+                mAudio.Stop();
+                mAudio.enabled = false;
+            }
+            if (mScreen)
+            {
+                mScreen.playOnAwake = false;
+                mScreen.Stop();
+                mScreen.enabled = false;
             }
         }
 
@@ -271,8 +347,36 @@ namespace OdinOnDemand.MPlayer
         private void YoutubeError(string message)
         {
             if (!youtubeBackendActive) return;
+            if (youtubeDecoder != null && youtubeDecoder.InputFailed && TryRecoverStream(message))
+                return;
             HandlePlaybackError(message);
             DestroyYoutubeBackend();
+        }
+
+        /// <summary>
+        ///     Stream URLs can be refused or expire while the page URL stays good; pressing Set
+        ///     again, a fresh extraction, was the only way back. This does that automatically and
+        ///     resumes where playback was, at most a couple of times so a video that keeps
+        ///     failing still ends in an error instead of retrying forever.
+        /// </summary>
+        private bool TryRecoverStream(string message)
+        {
+            var url = UnparsedURL;
+            if (string.IsNullOrEmpty(url)) return false;
+            if (Time.time - streamRecoveryWindowStart > StreamRecoveryWindowSeconds)
+            {
+                streamRecoveryWindowStart = Time.time;
+                streamRecoveries = 0;
+            }
+            if (streamRecoveries >= MaxStreamRecoveries) return false;
+            streamRecoveries++;
+
+            var resumeAt = (float)youtubeDecoder.FailedAtSeconds;
+            Logger.LogWarning($"{message} Fetching a new stream URL and resuming at {resumeAt:0.0}s " +
+                              $"(attempt {streamRecoveries}/{MaxStreamRecoveries}).");
+            DestroyYoutubeBackend();
+            RPC_SetURL(url, PlayerSettings.IsPaused, resumeAt);
+            return true;
         }
 
         private void HandlePlaybackError(string message)
@@ -881,6 +985,7 @@ namespace OdinOnDemand.MPlayer
         
         public void RPC_PlayStation(string dataURL, string trackTitle, float time)
         {
+            if (Headless) return;
             var station = StationManager.Instance.GetStation(dataURL);
             var track = station?.Tracks.FirstOrDefault(x => x.Title == trackTitle);
             if (track == null) return;
@@ -1012,7 +1117,9 @@ namespace OdinOnDemand.MPlayer
             mAudio.spatialBlend = 1;
             mAudio.spatialize = true;
             mAudio.spatializePostEffects = true;
-            mAudio.volume = PlayerSettings.Volume;
+            SetOutputVolume(PlayerSettings.Volume);
+            baseSpatialBlend = mAudio.spatialBlend;
+            audioTap = mAudio.gameObject.AddComponent<AudioTap>();
             if (mScreen != null)
             {
                 mScreen.audioOutputMode = UnityEngine.Video.VideoAudioOutputMode.AudioSource;
@@ -1029,7 +1136,9 @@ namespace OdinOnDemand.MPlayer
                if (waveformPanel)
                {
                    var waveform = waveformPanel.gameObject.AddComponent<AudioWaveformVisualizer>();
-                   waveform.Setup(mAudio);
+                   waveform.Setup(mAudio, () => speakerEmitters.Count > 0 && speakerEmitters[0]
+                       ? speakerEmitters[0].Source
+                       : null);
                }
            }
             if (UIController.RadioPanelThumbnail)
@@ -1247,7 +1356,7 @@ namespace OdinOnDemand.MPlayer
         }
         public void RPC_SetURL(string url, bool isPaused = false, float time = 0f)
         {
-            if (url == null) return;
+            if (url == null || Headless) return;
             System.Text.Encoding encoding = System.Text.Encoding.UTF8;
             byte[] bytes = encoding.GetBytes(url);
             url = StreamlinkRuntime.NormalizeChannelUrl(encoding.GetString(bytes));
@@ -1473,7 +1582,8 @@ namespace OdinOnDemand.MPlayer
             {
                 if (youtubeDecoder != null && youtubeDecoder.IsPrepared)
                 {
-                    if (youtubeDecoder.IsPaused || Math.Abs(youtubeDecoder.Time - pendingPlaybackTime) > 0.05d)
+                    if (youtubeDecoder.IsPaused ||
+                        Math.Abs(youtubeDecoder.Time - pendingPlaybackTime) > NetworkSeekTolerance)
                         youtubeDecoder.Time = pendingPlaybackTime;
                     hasPendingPlaybackTime = false;
                 }
@@ -1546,10 +1656,13 @@ namespace OdinOnDemand.MPlayer
             if (saveTime) SaveTimeZDO();
             zdo.Set("speakers", SpeakerHelper.CompressSpeakerLinks(speakerLinks));
             zdo.Set("speakerCount", speakerLinks.Count);
+            zdo.Set("speakerMode", (int)PlayerSettings.SpeakerOutput);
         }
         
         public void SaveTimeZDO()
         {
+            // The server plays nothing, so its playback time is always zero.
+            if (Headless) return;
             var zdo = ZNetView.GetZDO();
             if (zdo == null || (!OwnsZdo && !zdo.IsOwner())) return;
             zdo.Set("time", (float)PlaybackTime);
@@ -1579,6 +1692,7 @@ namespace OdinOnDemand.MPlayer
             PlayerSettings.IsPlaying = zdo.GetBool("isPlaying");
             PlayerSettings.IsPaused = zdo.GetBool("isPaused");
             PlayerSettings.CurrentMode = (PlayerSettings.PlayerMode)zdo.GetInt("currentMode");
+            if (Headless) return;
             if(PlayerSettings.CurrentMode == PlayerSettings.PlayerMode.Dynamic)
             {
                 PlayerSettings.DynamicStation = StationManager.Instance.GetStation(UnparsedURL);
@@ -1781,6 +1895,9 @@ namespace OdinOnDemand.MPlayer
         
         public void RemoveSpeaker(SpeakerComponent sp)
         {
+            // Client changes reach the server's copy of the links only through the ZDO.
+            var zdo = ZNetView ? ZNetView.GetZDO() : null;
+            if (Headless && zdo != null) LoadSpeakerLinks(zdo);
             var index = FindSpeakerLink(sp);
             if (index < 0) return;
             speakerLinks.RemoveAt(index);
@@ -1803,27 +1920,114 @@ namespace OdinOnDemand.MPlayer
             return speakerLinks.FindIndex(link => (link.Position - position).sqrMagnitude < 0.01f);
         }
 
+        internal void SetSpeakerOutput(SpeakerMode mode)
+        {
+            PlayerSettings.SpeakerOutput = mode;
+            SaveZDO();
+            UpdateSpeakerOutput();
+            SendUpdateZDO_RPC();
+        }
+
         private void OnSpeakerLinksChanged()
         {
+            if (Headless)
+            {
+                SaveSpeakerLinks();
+                SendUpdateZDO_RPC();
+                return;
+            }
             SaveZDO();
-            UpdateSpeakerCenter();
+            UpdateSpeakerOutput();
             UIController.UpdateSpeakerCount();
             StartCoroutine(ShowCenterSphere());
             SendUpdateZDO_RPC();
         }
 
+        /// <summary>
+        ///     Writes only the links. The server never receives the clients' other changes, so
+        ///     saving its whole copy of the state would roll them back.
+        /// </summary>
+        private void SaveSpeakerLinks()
+        {
+            var zdo = ZNetView ? ZNetView.GetZDO() : null;
+            if (zdo == null || !OwnsZdo) return;
+            ClaimOwnership(zdo);
+            zdo.Set("speakers", SpeakerHelper.CompressSpeakerLinks(speakerLinks));
+            zdo.Set("speakerCount", speakerLinks.Count);
+        }
+
         private void LoadSpeakerLinks(ZDO zdo)
         {
             speakerLinks = SpeakerHelper.DecompressSpeakerLinks(zdo.GetByteArray("speakers"));
-            UpdateSpeakerCenter();
+            PlayerSettings.SpeakerOutput = (SpeakerMode)zdo.GetInt("speakerMode");
+            UpdateSpeakerOutput();
         }
-        
-        private void UpdateSpeakerCenter()
+
+        /// <summary>
+        ///     Places the sound for the current links and mode. Each-speaker mode turns the
+        ///     player's own source 2D and silent, so it keeps feeding the tap wherever the
+        ///     listener is, and the emitters carry all of the audible sound.
+        /// </summary>
+        private void UpdateSpeakerOutput()
         {
             if (!mAudio) return;
-            mAudio.transform.position = speakerLinks.Count == 0
-                ? transform.position
-                : SpeakerHelper.CalculateAudioCenter(speakerLinks);
+            var eachSpeaker = audioTap && speakerLinks.Count > 0 &&
+                              PlayerSettings.SpeakerOutput == SpeakerMode.EachSpeaker;
+            if (!eachSpeaker)
+            {
+                SetEmitterPositions(null);
+                mAudio.spatialBlend = baseSpatialBlend;
+                if (audioTap && !audioTap.PassThrough)
+                {
+                    audioTap.Active = false;
+                    SetOutputVolume(OutputVolume);
+                    if (isActiveAndEnabled) StartCoroutine(UnmuteAfterBlendApplies());
+                    else audioTap.PassThrough = true;
+                }
+                mAudio.transform.position = speakerLinks.Count == 0
+                    ? transform.position
+                    : SpeakerHelper.CalculateAudioCenter(speakerLinks,
+                        EmitsFromSelf ? transform.position : (Vector3?)null);
+                return;
+            }
+
+            var positions = speakerLinks.Select(link => link.Position).ToList();
+            if (EmitsFromSelf) positions.Add(transform.position);
+            mAudio.transform.position = transform.position;
+            SetEmitterPositions(positions);
+            audioTap.PassThrough = false;
+            audioTap.Active = true;
+            mAudio.spatialBlend = 0f;
+            SetOutputVolume(OutputVolume);
+        }
+
+        /// <summary>
+        ///     The tap's flags reach the audio thread at once, the restored 3D blend only when
+        ///     Unity next updates its sources. Unmuting first would play the source in 2D, at
+        ///     full volume for every listener, for that moment.
+        /// </summary>
+        private IEnumerator UnmuteAfterBlendApplies()
+        {
+            yield return null;
+            yield return null;
+            if (audioTap && !audioTap.Active) audioTap.PassThrough = true;
+        }
+
+        /// <summary>Reuses emitters so a link change does not restart the ones that stay.</summary>
+        private void SetEmitterPositions(List<Vector3> positions)
+        {
+            int count = positions?.Count ?? 0;
+            for (int i = speakerEmitters.Count - 1; i >= count; i--)
+            {
+                if (speakerEmitters[i]) Destroy(speakerEmitters[i].gameObject);
+                speakerEmitters.RemoveAt(i);
+            }
+            for (int i = 0; i < count; i++)
+            {
+                if (i == speakerEmitters.Count)
+                    speakerEmitters.Add(SpeakerEmitter.Create(this, audioTap, baseSpatialBlend));
+                speakerEmitters[i].transform.position = positions[i];
+            }
         }
 
         public void UnlinkAllSpeakers()
@@ -1836,7 +2040,7 @@ namespace OdinOnDemand.MPlayer
         public void SetVolume(float volume)
         {
             PlayerSettings.Volume = volume;
-            if (mAudio) mAudio.volume = volume;
+            SetOutputVolume(volume);
             var key = LocalVolumeKey;
             if (key == null) return;
             PlayerPrefs.SetFloat(key, volume);
@@ -1850,7 +2054,7 @@ namespace OdinOnDemand.MPlayer
             if (key == null || !PlayerPrefs.HasKey(key)) return;
             PlayerSettings.Volume = PlayerPrefs.GetFloat(key, PlayerSettings.Volume);
             PlayerSettings.MuteVol = PlayerPrefs.GetFloat(key + ".unmuted", PlayerSettings.MuteVol);
-            if (mAudio) mAudio.volume = PlayerSettings.Volume;
+            SetOutputVolume(PlayerSettings.Volume);
             UIController?.UpdateVolumeControls();
         }
 

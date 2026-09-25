@@ -3,6 +3,17 @@
 
 ### Versions:
 
+## 1.3.0
+ - **Important security update.** Servers and all players should update. 1.3.0 can't connect to older versions.
+ - Added **Speaker Output** (cog menu): **Center** plays from one point between the speakers, **Each Speaker** plays from every linked speaker in sync.
+ - Radios and screens now count themselves as one of their linked speakers. Receivers still play only from their speakers.
+ - Added a **Show Speaker Links** remote key (middle mouse) that draws lines from media players to their linked speakers.
+ - Fixed the mod failing to load recipes on a fresh install.
+ - Dedicated servers no longer play media or flood their log with audio errors.
+ - Fixed a freeze caused by a radio station folder with no playable tracks, and radio stations that loaded late never advancing.
+ - Fixed YouTube videos loading forever for players joining partway through. Playback now recovers on its own.
+ - Fixed YouTube and stream playback stuttering on every time sync.
+
 ## 1.2.6
  - Moved settings to `BepInEx/config/com.valmedia.odinondemand.cfg`. The old `OdinOnDemand/config.cfg` is moved over automatically on first launch.
   - Fixed server settings being ignored by clients, including **Skalds Girdle Sold at Haldor** and **Skalds Girdle Cost**.

@@ -20,14 +20,26 @@ namespace OdinOnDemand.Utils.UI
         public bool enableOutlineEffect = true; // Enable outline effect for bars
         
         private bool _initialUpdateDone = false; // Flag to ensure initial update
+        private readonly float[] spectrumData = new float[128];
         [SerializeField] private int midStartIndex = 10;
         [SerializeField] private int midEndIndex = 32;
         [SerializeField] private float midScalingFactor = OODConfig.VisualizerScaleFactorMid.Value;
         [SerializeField] private float highScalingFactor = OODConfig.VisualizerScaleFactorHigh.Value;
         [SerializeField] private float baseScalingFactor = OODConfig.VisualizerScaleFactorBase.Value;
 
-        public void Setup(AudioSource audio)
+        // In each-speaker mode the player's own source is silenced and its emitters carry the
+        // sound. Unity may read the spectrum after that silencing, so an emitter stands in.
+        private Func<AudioSource> fallbackSource;
+
+        public void Setup(AudioSource audio, Func<AudioSource> fallback = null)
         {
+            fallbackSource = fallback;
+            // A dedicated server runs with audio disabled, where every spectrum read logs an error.
+            if (OdinOnDemandPlugin.IsHeadless)
+            {
+                enabled = false;
+                return;
+            }
             audioSource = audio;
             CreateBars();
             CreateGradient();
@@ -99,10 +111,16 @@ namespace OdinOnDemand.Utils.UI
 
         private void Update()
         {
+            if (!audioSource || bars == null) return;
             if (!_initialUpdateDone || audioSource.isPlaying)
             {
-                float[] spectrumData = new float[128];
                 audioSource.GetSpectrumData(spectrumData, 0, FFTWindow.Rectangular);
+                if (IsSilent(spectrumData))
+                {
+                    var fallback = fallbackSource?.Invoke();
+                    if (fallback && fallback.isPlaying)
+                        fallback.GetSpectrumData(spectrumData, 0, FFTWindow.Rectangular);
+                }
                 var parent = transform.parent;
                 float parentHeight = parent.GetComponent<RectTransform>().rect.height / parent.localScale.y;
 
@@ -131,5 +149,11 @@ namespace OdinOnDemand.Utils.UI
             }
         }
 
+        private static bool IsSilent(float[] spectrum)
+        {
+            foreach (var bin in spectrum)
+                if (bin != 0f) return false;
+            return true;
+        }
     }
 }

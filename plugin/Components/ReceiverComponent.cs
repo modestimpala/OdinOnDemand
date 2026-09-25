@@ -27,11 +27,15 @@ namespace OdinOnDemand.Components
             mPiece = gameObject.GetComponentInChildren<Piece>();
             mName = mPiece.m_name;
             PlayerSettings.PlayerType = CinemaPackage.MediaPlayers.Receiver;
+            if (Headless) return;
             
             SetupReceiver();
             
             InvokeRepeating(nameof(DropoffUpdate), 0.05f, 0.05f);
         }
+
+        // The receiver is a hub for its speakers, not a speaker itself.
+        protected override bool EmitsFromSelf => false;
 
         private void SetupReceiver()
         {
@@ -59,12 +63,12 @@ namespace OdinOnDemand.Components
                 {
                     // Decrease the volume based on the square of the height difference
                     var volumeDecrease = 1 - 1 / Mathf.Pow(heightDifference + 1, PlayerSettings.DropoffPower);
-                    mAudio.volume = Mathf.Max(0, PlayerSettings.Volume - volumeDecrease);
+                    SetOutputVolume(Mathf.Max(0, PlayerSettings.Volume - volumeDecrease));
                 }
                 else
                 {
                     // If the player is within the dropoff distance, set the volume to the original volume
-                    mAudio.volume = PlayerSettings.Volume;
+                    SetOutputVolume(PlayerSettings.Volume);
                 }
             }
         }
@@ -203,14 +207,15 @@ namespace OdinOnDemand.Components
 
     public class SpeakerHelper
     {
-        public static Vector3 CalculateAudioCenter(List<SpeakerLink> speakers)
+        /// <summary>Average of the speakers, counting <paramref name="self" /> as one more when given.</summary>
+        public static Vector3 CalculateAudioCenter(List<SpeakerLink> speakers, Vector3? self = null)
         {
-            var center = Vector3.zero;
+            var center = self ?? Vector3.zero;
             foreach (var speaker in speakers)
             {
                 center += speaker.Position;
             }
-            center /= speakers.Count;
+            center /= speakers.Count + (self.HasValue ? 1 : 0);
             return center;
         }
         

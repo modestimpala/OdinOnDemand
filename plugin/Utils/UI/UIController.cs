@@ -689,6 +689,22 @@ namespace OdinOnDemand.Utils.UI
         internal void UpdateSpeakerCount()
         {
             if(_speakerText) _speakerText.text = "Speakers: " + _basePlayer.SpeakerCount;
+            if (_speakerOutputText) _speakerOutputText.text = SpeakerOutputLabelText();
+        }
+
+        private string SpeakerOutputLabelText()
+        {
+            return _basePlayer.PlayerSettings.SpeakerOutput == SpeakerMode.EachSpeaker
+                ? "Output: Each Speaker"
+                : "Output: Center";
+        }
+
+        private void CycleSpeakerOutput()
+        {
+            _basePlayer.SetSpeakerOutput(_basePlayer.PlayerSettings.SpeakerOutput == SpeakerMode.EachSpeaker
+                ? SpeakerMode.Center
+                : SpeakerMode.EachSpeaker);
+            UpdateSpeakerCount();
         }
 
         private const float SettingsRowInset = 10f;
@@ -833,6 +849,17 @@ namespace OdinOnDemand.Utils.UI
             _speakerText = CreateRowLabel(speakerRow, "Speakers: 0", 130f);
             var unlinkAllButton = CreateRowButton(speakerRow, "Unlink All", 110f, SettingsRowInset);
             unlinkAllButton.onClick.AddListener(() => _basePlayer.UnlinkAllSpeakers());
+
+            // Only placed screens, radios and receivers take speaker links.
+            var playerType = _basePlayer.PlayerSettings.PlayerType;
+            if (playerType != CinemaPackage.MediaPlayers.BeltPlayer &&
+                playerType != CinemaPackage.MediaPlayers.CartPlayer)
+            {
+                var outputRow = CreateSettingsRow(contentTransform, 34f);
+                _speakerOutputText = CreateRowLabel(outputRow, SpeakerOutputLabelText(), 170f);
+                var outputButton = CreateRowButton(outputRow, "Change", 110f, SettingsRowInset);
+                outputButton.onClick.AddListener(CycleSpeakerOutput);
+            }
 
             //////////////////////////////
             /// TIME ROW ///
@@ -1286,6 +1313,7 @@ namespace OdinOnDemand.Utils.UI
         private GameObject _dynamicTabButtonObj;
         private InputField _urlInputField;
         private Text _speakerText;
+        private Text _speakerOutputText;
 
         public void SetInputFieldText(string text)
         {

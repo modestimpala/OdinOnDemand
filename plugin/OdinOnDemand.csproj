@@ -68,6 +68,7 @@
         <Compile Include="Patches\SpeakerDestroyPatch.cs" />
         <Compile Include="MPlayer\BasePlayer.cs" />
         <Compile Include="MPlayer\PlayerSettings.cs" />
+        <Compile Include="MPlayer\SpeakerOutput.cs" />
         <Compile Include="MPlayer\YoutubeDecoder.cs" />
         <Compile Include="Utils\Config\KeyConfig.cs" />
         <Compile Include="Utils\Config\OODConfig.cs" />
@@ -83,6 +84,7 @@
         <Compile Include="Utils\UI\AudioWaveformVisualizer.cs" />
         <Compile Include="Utils\UI\LoadingCircle.cs" />
         <Compile Include="Utils\UI\ScrollingText.cs" />
+        <Compile Include="Utils\UI\SpeakerLinkOverlay.cs" />
         <Compile Include="Utils\UI\UIController.cs" />
         <Compile Include="OdinOnDemandPlugin.cs" />
     </ItemGroup>

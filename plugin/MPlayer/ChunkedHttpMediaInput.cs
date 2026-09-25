@@ -32,9 +32,20 @@ namespace OdinOnDemand.MPlayer
         private const int MaxChunkSize = 4 * 1024 * 1024;
         private const int RequestTimeoutMs = 30000;
         private const int MaxAttempts = 3;
+        private const int RetryDelayMs = 500;
 
         private readonly string url;
         private readonly IDictionary<string, string> headers;
+        private readonly string urlDescription;
+
+        /// <summary>
+        ///     Set once a read the player needed has failed for good. LibVLC does not report a
+        ///     failing callback input, it stalls, so the decoder polls this instead.
+        /// </summary>
+        public volatile bool Failed;
+
+        /// <summary>True when the server refused the URL itself (403/410): only a new extraction helps.</summary>
+        public volatile bool Rejected;
 
         private byte[] chunk;
         private long chunkStart;
@@ -65,6 +76,40 @@ namespace OdinOnDemand.MPlayer
         {
             this.url = url;
             this.headers = headers;
+            urlDescription = DescribeUrl(url);
+        }
+
+        /// <summary>
+        ///     The googlevideo parameters that explain a rejection: the client the URL was issued
+        ///     to (c=), the time left before it expires, and whether it only works from one IP.
+        /// </summary>
+        private static string DescribeUrl(string url)
+        {
+            Uri uri;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out uri) || string.IsNullOrEmpty(uri.Query)) return "";
+            string client = null, expire = null;
+            var ipBound = false;
+            foreach (var pair in uri.Query.TrimStart('?').Split('&'))
+            {
+                var equals = pair.IndexOf('=');
+                var name = equals < 0 ? pair : pair.Substring(0, equals);
+                var value = equals < 0 ? "" : Uri.UnescapeDataString(pair.Substring(equals + 1));
+                if (name == "c") client = value;
+                else if (name == "expire") expire = value;
+                else if (name == "ip") ipBound = true;
+            }
+            if (client == null && expire == null) return "";
+
+            var parts = new List<string>();
+            if (client != null) parts.Add("client " + client);
+            long expireUnix;
+            if (expire != null && long.TryParse(expire, NumberStyles.Integer, CultureInfo.InvariantCulture, out expireUnix))
+            {
+                var left = DateTimeOffset.FromUnixTimeSeconds(expireUnix) - DateTimeOffset.UtcNow;
+                parts.Add(left.TotalSeconds > 0 ? $"expires in {(int)left.TotalMinutes} min" : "expired");
+            }
+            if (ipBound) parts.Add("bound to the extracting IP");
+            return " [" + string.Join(", ", parts.ToArray()) + "]";
         }
 
         public override bool Open(out ulong size)
@@ -74,7 +119,11 @@ namespace OdinOnDemand.MPlayer
             {
                 // The first chunk doubles as the length probe, so playback starts on one request.
                 var first = Download(0, chunkSize, null, true, CancellationToken.None);
-                if (first == null || totalLength < 0) return false;
+                if (first == null || totalLength < 0)
+                {
+                    Failed = true;
+                    return false;
+                }
                 UseChunk(0, first);
 
                 position = 0;
@@ -156,7 +205,11 @@ namespace OdinOnDemand.MPlayer
             }
 
             var fetched = Download(offset, chunkSize, TakeSpareBuffer(), false, CancellationToken.None);
-            if (fetched == null) return false;
+            if (fetched == null)
+            {
+                Failed = true;
+                return false;
+            }
             UseChunk(offset, fetched);
             return true;
         }
@@ -259,9 +312,20 @@ namespace OdinOnDemand.MPlayer
                 catch (Exception exception) when (exception is WebException || exception is IOException)
                 {
                     if (cancellation.IsCancellationRequested) return null;
+                    var status = ((exception as WebException)?.Response as HttpWebResponse)?.StatusCode;
+                    // A refused URL fails the same way on every retry, and each retry delays the
+                    // new extraction that can actually fix it.
+                    var refused = status == HttpStatusCode.Forbidden || status == HttpStatusCode.Gone;
                     Logger.LogWarning(
-                        $"Media chunk {offset}-{last} failed (attempt {attempt}/{MaxAttempts}): {exception.Message}");
+                        $"Media chunk {offset}-{last} failed (attempt {attempt}/{MaxAttempts}): {exception.Message}" +
+                        urlDescription);
+                    if (refused)
+                    {
+                        Rejected = true;
+                        return null;
+                    }
                     if (attempt == MaxAttempts) return null;
+                    if (cancellation.WaitHandle.WaitOne(RetryDelayMs * attempt)) return null;
                 }
             }
 

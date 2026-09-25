@@ -59,6 +59,12 @@ namespace OdinOnDemand.MPlayer
         private Texture2D cpuTexture;
         private RenderTexture targetTexture;
 
+        /// <summary>The last failure was the video download itself; a new extraction may fix it.</summary>
+        public bool InputFailed { get; private set; }
+
+        /// <summary>Playback position when the last failure hit, to resume from.</summary>
+        public double FailedAtSeconds { get; private set; }
+
         public event Action Prepared;
         public event Action Ended;
         public event Action<string> Error;
@@ -314,6 +320,17 @@ namespace OdinOnDemand.MPlayer
             if (!isPrepared && UnityEngine.Time.realtimeSinceStartup - prepareStartedAt > PrepareTimeoutSeconds)
             {
                 FailCurrent(current, "LibVLC timed out while preparing the media stream.");
+                return;
+            }
+
+            // LibVLC stalls on a failed callback read instead of raising an error.
+            ChunkedHttpMediaInput input = current.Input;
+            if (input != null && input.Failed)
+            {
+                InputFailed = true;
+                FailCurrent(current, input.Rejected
+                    ? "The stream server refused the video URL."
+                    : "The video stopped downloading.");
                 return;
             }
 
@@ -961,6 +978,7 @@ namespace OdinOnDemand.MPlayer
             {
                 return;
             }
+            FailedAtSeconds = pendingSeekSeconds ?? ReadPlaybackClock();
             lastSampledNativeTime = -1;
 
             session = null;

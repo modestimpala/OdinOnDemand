@@ -35,6 +35,7 @@ namespace OdinOnDemand.Components
             {
                 PlayerSettings.PlayerType = CinemaPackage.MediaPlayers.CinemaScreen;
             }
+            if (Headless) return;
             if(transform.Find("screenUICanvas"))
             {
                 ScreenUICanvasObj = transform.Find("screenUICanvas").gameObject;
@@ -48,7 +49,7 @@ namespace OdinOnDemand.Components
         public void Start()
         {
             // add trigger collider if we need it for screen disable or audio fade type is toggle
-            if (OODConfig.ScreenDisableOutOfRange.Value)
+            if (OODConfig.ScreenDisableOutOfRange.Value && !Headless)
             {
                 triggerCollider = gameObject.AddComponent<SphereCollider>();
                 triggerCollider.isTrigger = true;
@@ -138,12 +139,12 @@ namespace OdinOnDemand.Components
                 {
                     // Decrease the volume based on the square of the height difference
                     var volumeDecrease = 1 - 1 / Mathf.Pow(heightDifference + 1, PlayerSettings.DropoffPower);
-                    mAudio.volume = Mathf.Max(0, PlayerSettings.Volume - volumeDecrease);
+                    SetOutputVolume(Mathf.Max(0, PlayerSettings.Volume - volumeDecrease));
                 }
                 else
                 {
                     // If the player is within the dropoff distance, set the volume to the original volume
-                    mAudio.volume = PlayerSettings.Volume;
+                    SetOutputVolume(PlayerSettings.Volume);
                 }
             }
         }

@@ -22,6 +22,7 @@ namespace OdinOnDemand.Components
             WaveParticleSystem = gameObject.GetComponentInChildren<ParticleSystem>();
             
             PlayerSettings.PlayerType = CinemaPackage.MediaPlayers.CartPlayer;
+            if (Headless) return;
 
             SetupCartPlayer();
             

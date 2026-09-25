@@ -32,7 +32,7 @@ namespace OdinOnDemand
     {
         public const string PluginGUID = "com.valmedia.odinondemand";
         public const string PluginName = "OdinOnDemand";
-        public const string PluginVersion = "1.2.6";
+        public const string PluginVersion = "1.3.0";
 
         private static readonly CustomLocalization Localization = LocalizationManager.Instance.GetLocalization();
         public static readonly RpcHandler RPCHandlers = new RpcHandler();
@@ -47,6 +47,9 @@ namespace OdinOnDemand
         public static ConfigFile OdinConfig { get; private set; }
         
         public StationManager StationManager { get; private set; }
+
+        /// <summary>A dedicated server: no graphics device, and no audio to play either.</summary>
+        internal static bool IsHeadless => SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null;
 
         private void Awake()
         {
@@ -161,38 +164,8 @@ namespace OdinOnDemand
         
         private void AddRecipes()
         {
-            //Piece recipes
-            if (!File.Exists(_pieceRecipeFile))
-            {
-                WriteDefaultPieceConfig("default.json");
-                Jotunn.Logger.LogDebug(
-                    "Did not find recipe json, loading and writing default recipes to: " + _pieceRecipeFile);
-            }
-            //Item recipes
-            if(!File.Exists(_itemRecipeFile))
-            {
-                WriteDefaultItemConfig("default_items.json");
-                Jotunn.Logger.LogDebug(
-                    "Did not find item recipe json, loading and writing default recipes to: " + _itemRecipeFile);
-            }
-            
-            
-            var pieceRecipesStringFromFile = File.ReadAllText(_pieceRecipeFile);
-            if (!IsValidJson(pieceRecipesStringFromFile))
-            {
-                WriteDefaultPieceConfig("default.json");
-                Jotunn.Logger.LogWarning(
-                    "JSON in com.ood.valmedia.recipes.json is invalid. Setting to default recipes. " +
-                    "If you wish to edit recipes please use a JSON validator or delete your recipe file and restart the game for a new default file.");
-            }
-            var itemRecipesStringFromFile = File.ReadAllText(_itemRecipeFile);
-            if(!IsValidJson(itemRecipesStringFromFile))
-            {
-                WriteDefaultItemConfig("default_items.json");
-                Jotunn.Logger.LogWarning(
-                    "JSON in com.ood.valmedia.recipes_item.json is invalid. Setting to default recipes. " +
-                    "If you wish to edit recipes please use a JSON validator or delete your recipe file and restart the game for a new default file.");
-            }
+            var pieceRecipesStringFromFile = LoadRecipeJson(_pieceRecipeFile, "default.json");
+            var itemRecipesStringFromFile = LoadRecipeJson(_itemRecipeFile, "default_items.json");
             
             //check if old recipe file, if so update to new recipes
             var oldRecipeBool = !pieceRecipesStringFromFile.Contains("receiver") || !pieceRecipesStringFromFile.Contains("theater") ||
@@ -251,42 +224,42 @@ namespace OdinOnDemand
             }
         }
 
-        private void WriteDefaultPieceConfig(string fileName)
+        /// <summary>
+        ///     Returns the recipe JSON in <paramref name="file" />. A missing or invalid file is
+        ///     replaced with the embedded default, and the default is used even when it cannot be
+        ///     written: a fresh install has no OdinOnDemand config folder yet, and failing here
+        ///     stopped the plugin from loading.
+        /// </summary>
+        private static string LoadRecipeJson(string file, string defaultResource)
         {
+            string json = null;
             try
             {
-                var file = _pieceRecipeFile;
-                var defaultRecip = FileFromManifest("OdinOnDemand.Assets." + fileName);
+                if (File.Exists(file)) json = File.ReadAllText(file);
+            }
+            catch (Exception e)
+            {
+                Jotunn.Logger.LogWarning("Could not read " + file + ": " + e.Message);
+            }
 
-                var writer = File.CreateText(file);
-                writer.Write(defaultRecip);
-                writer.Close();
-                writer.Dispose();
-                
-            } catch (Exception ex)
-            {
-                Jotunn.Logger.LogError("Exception when handling default recipe file. Check log for details.");
-                Jotunn.Logger.LogWarning(ex);
-            }
-        }
-        
-        private void WriteDefaultItemConfig(string fileName)
-        {
+            if (json != null && IsValidJson(json)) return json;
+            if (json != null)
+                Jotunn.Logger.LogWarning(
+                    "JSON in " + file + " is invalid. Setting to default recipes. " +
+                    "If you wish to edit recipes please use a JSON validator or delete your recipe file and restart the game for a new default file.");
+
+            var defaults = FileFromManifest("OdinOnDemand.Assets." + defaultResource);
             try
             {
-                var file = _itemRecipeFile;
-                var defaultRecip = FileFromManifest("OdinOnDemand.Assets." + fileName);
-                
-                var writer = File.CreateText(file);
-                writer.Write(defaultRecip);
-                writer.Close();
-                writer.Dispose();
-                
-            } catch (Exception ex)
-            {
-                Jotunn.Logger.LogError("Exception when handling default recipe file. Check log for details.");
-                Jotunn.Logger.LogWarning(ex);
+                Directory.CreateDirectory(Path.GetDirectoryName(file));
+                File.WriteAllText(file, defaults);
+                Jotunn.Logger.LogDebug("Wrote default recipes to " + file);
             }
+            catch (Exception e)
+            {
+                Jotunn.Logger.LogWarning("Could not write default recipes to " + file + ", using them unsaved: " + e.Message);
+            }
+            return defaults;
         }
 
         private static string FileFromManifest(string file)
@@ -347,6 +320,7 @@ namespace OdinOnDemand
                 { "item_skaldsgirdle", "Skald's Girdle" },
                 { "remote_usehint", "Use Screen" },
                 { "remote_linkhint", "Link/Unlink" },
+                { "remote_showlinkshint", "Show Speaker Links" },
                 { "skaldsgirdle_hint", "Consult Skald"},
                 { "remote_changelinkmodehint", "Change Link Mode"},
                 { "item_remote_description", "Allows you to use media-players from a distance." },

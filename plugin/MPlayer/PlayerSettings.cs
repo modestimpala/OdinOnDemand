@@ -50,6 +50,9 @@ namespace OdinOnDemand.MPlayer
 
         public bool IsLinkedToParent { set; get; } = false;
 
+        /// <summary>Where linked speakers play from. Shared through the ZDO.</summary>
+        public SpeakerMode SpeakerOutput { set; get; } = SpeakerMode.Center;
+
         public CinemaPackage.MediaPlayers PlayerType { set; get; }
         
         public DynamicStation DynamicStation { get; set; }

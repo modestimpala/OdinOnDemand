@@ -18,6 +18,11 @@ namespace OdinOnDemand.Dynamic
 
         private static readonly RpcHandler RPCHandler = OdinOnDemandPlugin.RPCHandlers;
 
+        // One simulation per station. Folder stations finish loading after the pieces register,
+        // and a host that reloads a world registers them again.
+        private readonly Dictionary<DynamicStation, Coroutine> _playback = new Dictionary<DynamicStation, Coroutine>();
+        private bool _simulating;
+
         public void Awake() 
         {
             DynamicStations = new List<DynamicStation>();
@@ -28,13 +33,15 @@ namespace OdinOnDemand.Dynamic
 
         private void StartStationPlayback()
         {
-            if(ZNet.instance.IsDedicated() || ZNet.instance.IsServer())
-            {
-                foreach (var station in DynamicStations)
-                {
-                    StartCoroutine(SimulateStationPlayback(station));
-                }
-            }
+            if (!ZNet.instance || !ZNet.instance.IsServer()) return;
+            _simulating = true;
+            foreach (var station in DynamicStations) StartSimulation(station);
+        }
+
+        private void StartSimulation(DynamicStation station)
+        {
+            if (_playback.TryGetValue(station, out var running) && running != null) StopCoroutine(running);
+            _playback[station] = StartCoroutine(SimulateStationPlayback(station));
         }
 
         public void SetCurrentTrackIndex(string stationName, int trackIndex)
@@ -44,7 +51,9 @@ namespace OdinOnDemand.Dynamic
 
         public void AddStation(DynamicStation station)
         {
+            if (station == null) return;
             DynamicStations.Add(station);
+            if (_simulating && ZNet.instance && ZNet.instance.IsServer()) StartSimulation(station);
         }
         public void RemoveStation(DynamicStation station)
         {
@@ -139,6 +148,14 @@ namespace OdinOnDemand.Dynamic
         }
         private IEnumerator SimulateStationPlayback(DynamicStation station)
         {
+            // Without a track that has a length the loop below never yields, freezing the game.
+            // A station folder with a title.txt but no loadable audio has no tracks at all.
+            if (!station.Tracks.Exists(t => t.TrackLength > 0f))
+            {
+                Logger.LogWarning("Radio station " + station.Title + " has no playable tracks; not simulating it.");
+                yield break;
+            }
+
             while (true)
             {
                 for (station.CurrentTrackIndex = 0; station.CurrentTrackIndex < station.Tracks.Count; station.CurrentTrackIndex++)
@@ -148,6 +165,7 @@ namespace OdinOnDemand.Dynamic
                     
                     var track = station.Tracks[station.CurrentTrackIndex];
                     track.CurrentTime = 0;
+                    if (track.TrackLength <= 0f) continue;
             
                     // Simulate track playback
                     while (track.CurrentTime < track.TrackLength)

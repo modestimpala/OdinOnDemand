@@ -15,12 +15,13 @@ namespace OdinOnDemand.Components
         public new void Awake()
         {
             base.Awake();
-            WaveParticleSystem = gameObject.GetComponentInChildren<ParticleSystem>();
-            WaveParticleSystem.Stop();
             mName = "Skald's Girdle";
-            
             PlayerSettings.PlayerType = CinemaPackage.MediaPlayers.BeltPlayer;
             PlayerSettings.IsLooping = true;
+            if (Headless) return;
+
+            WaveParticleSystem = gameObject.GetComponentInChildren<ParticleSystem>();
+            WaveParticleSystem.Stop();
             
             SetupBeltPlayer();
             

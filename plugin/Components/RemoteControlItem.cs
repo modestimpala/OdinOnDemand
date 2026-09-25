@@ -2,6 +2,7 @@
 using OdinOnDemand.MPlayer;
 using OdinOnDemand.Utils;
 using OdinOnDemand.Utils.Config;
+using OdinOnDemand.Utils.UI;
 using UnityEngine;
 
 namespace OdinOnDemand.Components
@@ -42,12 +43,24 @@ namespace OdinOnDemand.Components
                     CheckUtilityItem();
             }
             
+            if (KeyConfig.ShowLinksButton != null && ZInput.GetButtonDown(KeyConfig.ShowLinksButton.Name))
+            {
+                MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft,
+                    SpeakerLinkOverlay.Toggle(this) ? "Showing speaker links" : "Hiding speaker links");
+            }
+
             if (KeyConfig.LinkRemoteButton == null) return;
             if (ZInput.GetButtonDown(KeyConfig.LinkRemoteButton.Name))
             {
                 ProcessRaycastSpeaker();
             }
            
+        }
+
+        // Putting the remote away hides the lines it turned on.
+        private void OnDestroy()
+        {
+            SpeakerLinkOverlay.Hide(this);
         }
 
         private bool ProcessRaycastSpeaker()
